@@ -49,10 +49,17 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
   auto KeyAt(int index) const -> KeyType;
-
- private:
+  auto Insert(const KeyType &k,const ValueType &v, KeyComparator &comp) -> bool;
+  auto GetValue(KeyType k, KeyComparator comp, std::vector<ValueType> *result) -> bool;
+  auto GetSplittingPoint() -> int;
+  auto pop() -> MappingType;
+  auto IsFull() -> bool;
+  auto getFirstElement() -> MappingType;
+  auto KeyExist(KeyType k,KeyComparator comp) -> bool;
+  private:
   page_id_t next_page_id_;
   // Flexible array member for page data.
-  MappingType array_[1];
+    //Note i make this array fixed until i knew how to make array a dynamic structure !!
+  MappingType array_[LEAF_PAGE_SIZE];
 };
 }  // namespace bustub

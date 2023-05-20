@@ -41,9 +41,17 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   auto KeyAt(int index) const -> KeyType;
   void SetKeyAt(int index, const KeyType &key);
   auto ValueAt(int index) const -> ValueType;
-
+  auto GetMedian() -> int;
+  auto IsFull() -> bool;
+  auto getFirstElement() -> MappingType;
+  auto pop() -> MappingType;
+  auto Insert(const ValueType &leftV, const KeyType &k,const ValueType &v ,KeyComparator &comp) -> bool;
+  auto InsertAndShift(const KeyType &k,const ValueType &v ,KeyComparator &co) -> bool;
+  auto InsertInFirstIndex(ValueType leftPointer) -> void;
+  auto InsertInFullNode(const KeyType &k,const ValueType &Pointer,KeyComparator &comp, BPlusTreeInternalPage* reciever) -> MappingType;
+  auto GetArraySize() -> int;
  private:
   // Flexible array member for page data.
-  MappingType array_[1];
+  MappingType array_[INTERNAL_PAGE_SIZE];
 };
 }  // namespace bustub

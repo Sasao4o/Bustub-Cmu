@@ -73,7 +73,8 @@ class BPlusTree {
 
   // read data from file and remove one by one
   void RemoveFromFile(const std::string &file_name, Transaction *transaction = nullptr);
-
+  auto  testKeyExist(KeyComparator comparator) -> int;
+    auto SplitLeafNode(LeafPage * page, LeafPage**newPage, std::pair<KeyType,ValueType>&) -> void;
  private:
   void UpdateRootPageId(int insert_record = 0);
 
@@ -81,7 +82,18 @@ class BPlusTree {
   void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;
 
   void ToString(BPlusTreePage *page, BufferPoolManager *bpm) const;
+ 
+  auto FindLeaf(KeyType key, page_id_t currentPageId) -> LeafPage*; 
+ 
+  auto InsertInFullInternal(const KeyType &k,const page_id_t &Pointer, InternalPage * page, InternalPage**newPage) -> std::pair<KeyType, page_id_t>;
+  auto InsertIntoParent(InternalPage *parentNode, const KeyType &key, BPlusTreePage * currentPage,page_id_t brotherId, Transaction*trans) -> void;
 
+  template < typename T >
+  auto MakeTwin(T *oldPage) -> T *;
+  template<typename T>
+  auto BuildRootNode(int maxSize) -> T *;
+
+ 
   // member variable
   std::string index_name_;
   page_id_t root_page_id_;
