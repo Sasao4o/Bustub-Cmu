@@ -44,15 +44,6 @@ namespace bustub {
 
   }
 
-  INDEX_TEMPLATE_ARGUMENTS
-    template < typename T >
-  auto BPLUSTREE_TYPE::MakeTwin(T *oldPage) -> T *{
-    page_id_t newPageId;
-    Page * newRawPage = buffer_pool_manager_ -> NewPage( & newPageId);
-    T * newPage = reinterpret_cast < T * > (newRawPage -> GetData());
-    newPage -> Init(newPageId, oldPage -> GetParentPageId(), oldPage -> GetMaxSize());
-    return newPage;
-  }
   /*****************************************************************************
    * INSERTION
    *****************************************************************************/
@@ -96,9 +87,8 @@ namespace bustub {
       //We Need to Split
       LeafPage * returnedLeaf;
       MappingType newPair = std::make_pair(key, value);
-       LOG_DEBUG("Value in the splitted leafi s %d" , 31);
-      SplitLeafNode(ourLeaf, & returnedLeaf, newPair);
-      LOG_DEBUG("Value in the splitted leafi s %d" , returnedLeaf->GetSize());
+      bool result = SplitLeafNode(ourLeaf, & returnedLeaf, newPair);
+
       page_id_t parentId = returnedLeaf -> GetParentPageId();
       InternalPage * parentPage;
       if (parentId == INVALID_PAGE_ID) {
@@ -112,12 +102,19 @@ namespace bustub {
        if (rawParentPage == nullptr) return false;
         parentPage = reinterpret_cast < InternalPage * > (rawParentPage -> GetData());
       }
-         InsertIntoParent(parentPage,returnedLeaf -> KeyAt(0), returnedLeaf, ourLeaf -> GetPageId(), transaction);
-         buffer_pool_manager_ -> UnpinPage(parentId, true);
-         buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), true);
-         buffer_pool_manager_ -> UnpinPage(returnedLeaf -> GetPageId(), true);
- 
-      return true;
+      
+       
+         std::pair < KeyType, page_id_t > m = std::make_pair(returnedLeaf -> KeyAt(0), returnedLeaf -> GetPageId());
+         InsertIntoParent(parentPage, m.first, m.second, ourLeaf -> GetPageId(), transaction);
+         
+      // parentPage->Insert(ourLeaf->GetPageId(), returnedLeaf->KeyAt(0), returnedLeaf->GetPageId(), comparator_);
+      buffer_pool_manager_ -> UnpinPage(parentId, true);
+      buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), result);
+        buffer_pool_manager_ -> UnpinPage(returnedLeaf -> GetPageId(), result);
+        // BPlusTreePage* bpTree = reinterpret_cast < BPlusTreePage * > (buffer_pool_manager_ -> FetchPage(root_page_id_) -> GetData());
+        //  LOG_DEBUG("Root page id is %d", bpTree->GetPageId());
+        //  LOG_DEBUG("Size is %d" ,bpTree->GetSize());
+      return result;
     } else {
       bool result = ourLeaf -> Insert(key, value, comparator_);
       buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), result);
@@ -156,7 +153,7 @@ namespace bustub {
   }
 
   INDEX_TEMPLATE_ARGUMENTS
-  auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage * oldLeafPage, LeafPage ** returnedNewPage, std::pair < KeyType, ValueType > & newPair) -> void {
+  auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage * oldLeafPage, LeafPage ** returnedNewPage, std::pair < KeyType, ValueType > & newPair) -> bool {
     std::vector < std::pair < KeyType, ValueType >> temporaryLeafPage;
     bool done = false;
     int arrayLength = oldLeafPage->GetSize();
@@ -174,13 +171,11 @@ namespace bustub {
     }
     page_id_t newPageId;
     Page * newPage = buffer_pool_manager_ -> NewPage( & newPageId);
-    // if (newPage == nullptr) return false;
+    if (newPage == nullptr) return false;
     LeafPage * newLeafPage = reinterpret_cast < LeafPage * > (newPage -> GetData());
     newLeafPage -> Init(newPageId, oldLeafPage -> GetParentPageId(), oldLeafPage -> GetMaxSize());
-    // LeafPage *newLeafPage = MakeTwin<LeafPage>(oldLeafPage);
-    if (newLeafPage == nullptr) return;
     newLeafPage -> SetNextPageId(oldLeafPage -> GetNextPageId());
-    oldLeafPage -> SetNextPageId(newLeafPage->GetPageId());
+    oldLeafPage -> SetNextPageId(newPageId);
     int median = ceil((temporaryLeafPage.size() / 2.0));
     for (int i = 0; i < median; i++) {
       MappingType keyValuePair = temporaryLeafPage.back();
@@ -195,26 +190,24 @@ namespace bustub {
     }
     *returnedNewPage = newLeafPage;
  
-    return;
+    return true;
   }
 
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::InsertInFullInternal(const KeyType &k,const page_id_t &Pointer,InternalPage * oldInternalPage, InternalPage ** returnedNewPage) -> std::pair<KeyType, page_id_t> {
         int arrayLength = oldInternalPage->GetArraySize();
         if (arrayLength != oldInternalPage->GetMaxSize() + 1) {
-          //The Internal Node is not full 
            KeyType k;
            page_id_t v = INVALID_PAGE_ID;
            return std::make_pair(k, v);
        }
-    // page_id_t newPageId;
-    // Page * newPage = buffer_pool_manager_ -> NewPage( & newPageId);
-    // InternalPage * newInternalPage = reinterpret_cast < InternalPage * > (newPage -> GetData());
-    // newInternalPage -> Init(newPageId, oldInternalPage -> GetParentPageId(), oldInternalPage -> GetMaxSize());
-    InternalPage * newInternalPage = MakeTwin<InternalPage>(oldInternalPage);
-    if (newInternalPage == nullptr) { KeyType k; return std::make_pair( k, INVALID_PAGE_ID);}
+    page_id_t newPageId;
+    Page * newPage = buffer_pool_manager_ -> NewPage( & newPageId);
+    InternalPage * newInternalPage = reinterpret_cast < InternalPage * > (newPage -> GetData());
+    newInternalPage -> Init(newPageId, oldInternalPage -> GetParentPageId(), oldInternalPage -> GetMaxSize());
     BPlusTreeInternalPage < KeyType, page_id_t  , KeyComparator > temporaryPage;
     temporaryPage.Init(INVALID_PAGE_ID, INVALID_PAGE_ID, oldInternalPage->GetMaxSize() + 1);
+    // temporaryPage.SetMaxSize(oldInternalPage -> GetMaxSize() + 1); //Just For Holding all so i can split easily (This step is for simplification)
     for (int i = 1; i < arrayLength; i++) {
  
       page_id_t leftPointer = oldInternalPage -> ValueAt(i - 1);
@@ -248,14 +241,14 @@ namespace bustub {
   }
 
   INDEX_TEMPLATE_ARGUMENTS
-  auto BPLUSTREE_TYPE::InsertIntoParent(InternalPage * currentInternal, const KeyType & key, BPlusTreePage * currentPage, page_id_t brotherId, Transaction * transaction) -> void {
+  auto BPLUSTREE_TYPE::InsertIntoParent(InternalPage * currentInternal, KeyType & key, page_id_t & value, page_id_t brotherId, Transaction * transaction) -> void {
         if (currentInternal->IsFull()) {
           InternalPage *brotherPage;
           InternalPage *parentPage;
           page_id_t parentPageId = currentInternal->GetParentPageId(); 
-          std::pair<KeyType,page_id_t> returnedPair = InsertInFullInternal(key, currentPage->GetPageId(), currentInternal, &brotherPage);
+          std::pair<KeyType,page_id_t> returnedPair = InsertInFullInternal(key, value, currentInternal, &brotherPage);
           if (parentPageId == INVALID_PAGE_ID) {
-        //Here i need to create new root 
+        //Here i need to create new rgit oot 
          parentPage = BuildRootNode < InternalPage > (internal_max_size_);
          if (parentPage == 0) return;
           parentPageId = parentPage -> GetPageId();
@@ -266,15 +259,16 @@ namespace bustub {
         }
          currentInternal->SetParentPageId(parentPageId);
         brotherPage->SetParentPageId(parentPageId);
-      currentPage->SetParentPageId(returnedPair.second);
- 
-           InsertIntoParent(parentPage,returnedPair.first, brotherPage, currentInternal->GetPageId(), transaction);
-    
+     
+           LOG_DEBUG("AFTER EVERY THING THE NEWINTERNALPAGE SIZE IS %d", brotherPage->ValueAt(0));
+           InsertIntoParent(parentPage,returnedPair.first, returnedPair.second, currentInternal->GetPageId(), transaction);
+        //   parentPage->Insert(currentInternal->GetPageId(), returnedPair.first, brotherPage->GetPageId(), comparator_);
+          
            buffer_pool_manager_ -> UnpinPage(brotherPage->GetPageId(), true);
            buffer_pool_manager_ -> UnpinPage(parentPageId, true);
          } 
          else {
-          currentInternal->Insert(brotherId, key, currentPage->GetPageId(), comparator_);
+          currentInternal->Insert(brotherId, key, value, comparator_);
         }
   }
 
