@@ -55,11 +55,40 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
     if (index == 0) return;
 
-    if (  index >= this->GetMaxSize() ) return;
+    if (  index > this->GetMaxSize() ) return;
 
     array_[index].first = key;
 }
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::ChangeKeyOfValue(ValueType value, KeyType &key) {
+        if (ValueAt(0) == value) return;
+        for (int i = 1; i < GetArraySize(); i++) {
+          if (ValueAt(i) == value) {
+            SetKeyAt(i, key);
+          }
+        }
+        
+}
 
+INDEX_TEMPLATE_ARGUMENTS
+bool B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(ValueType value) {
+        //Note the core assumption of the implementation is the left page never can be removed no matter what happened
+        //as we move every thing in this direction <<<
+      for (int i = 1; i < GetArraySize(); i++) {
+        if (ValueAt(i) == value) {
+               int size = GetArraySize() - 1;
+              for (int j = i; j < size; j++) {
+               array_[j] = array_[j + 1];
+                 }
+                 this->IncreaseSize(-1);
+                 return true;
+        }
+      }
+      return false;
+}
+
+
+ 
 INDEX_TEMPLATE_ARGUMENTS
 bool B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const ValueType &leftPointer, const KeyType &key,const ValueType &RightPointer,KeyComparator &comparator) { 
 
@@ -100,7 +129,7 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertAndShift(const KeyType &k,const Value
 }
 
 INDEX_TEMPLATE_ARGUMENTS 
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetArraySize() -> int {
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetArraySize() const -> int {
     return this->GetSize() + 1;
 }
 
@@ -147,16 +176,45 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertInFullNode(const KeyType &k,const Val
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
     ValueType v{};
-    if (  index > this->GetSize() ) return v;
+    int size = GetArraySize();
+    if (  index >= size ) return v;
     return array_[index].second;
  
 
  }
-
-
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::pushFront(KeyType &key, ValueType value) -> void {
+    if (IsFull()) {
+      return;
+    }   
+    int i = GetArraySize();
+    for (; i > 1; i--) {
+        array_[i] = array_[i - 1];
+    }
+    MappingType firstIndexPair = std::make_pair(key, array_[0].second);
+    array_[1] = firstIndexPair;
+    array_[0].second = value;
+    this->IncreaseSize(1);
+ }
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::pushBack(KeyType &key, ValueType value) -> void {
+    if (IsFull()) {
+      return;
+    }   
+    int length = GetArraySize();
+    MappingType pair = std::make_pair(key, value);
+    this->IncreaseSize(1);
+    array_[length ] = pair;
+     
+ }
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::IsFull()  -> bool {
   return this->GetMaxSize() == this->GetSize();
+ }
+
+ INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::IsMin()  -> bool {
+  return this->GetMinSize() == this->GetSize();
  }
  INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::getFirstElement() -> MappingType {
@@ -178,6 +236,22 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::pop() -> MappingType {
     }
     return m;
 }
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::popFront() -> MappingType {
+     
+    MappingType m {};
+    if (GetSize() == 0) return m;
+    m = std::make_pair(array_[1].first,array_[0].second);
+    array_[0].second = array_[1].second;
+    
+    for (int i = 1; i < GetArraySize() - 1; i++) {
+      array_[i] = array_[i + 1];
+    }
+     if (this->GetSize() > 0) {
+    this->IncreaseSize(-1);
+    }
+    return m;
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertInFirstIndex(ValueType leftPointer) -> void {
@@ -189,6 +263,35 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertInFirstIndex(ValueType leftPointer) -
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetMedian() -> int {
   return ceil((this->GetSize() - 1) / 2) + 1;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetLeftSibling(page_id_t currentPageId) -> page_id_t {
+    if (ValueAt(0) == currentPageId) return INVALID_PAGE_ID;
+    for (int i = 1; i < GetArraySize(); i++) {
+        if (ValueAt(i) == currentPageId) return ValueAt(i - 1);
+    }
+ 
+    return INVALID_PAGE_ID; 
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetRightSibling(page_id_t currentPageId) -> page_id_t {
+    if (ValueAt(GetArraySize() - 1) == currentPageId) return INVALID_PAGE_ID;
+    for (int i = 0; i < GetArraySize() - 1; i++) {
+        if (ValueAt(i) == currentPageId) return ValueAt(i + 1);
+    }
+    return INVALID_PAGE_ID; 
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetKeyOfValue(ValueType value) -> KeyType {
+     KeyType k{};
+    if (ValueAt(0) == value) return k;
+    for (int i = 1; i < GetArraySize(); i++) {
+        if (ValueAt(i) == value) return KeyAt(i);
+    }
+    return k;
 }
 // valuetype for internalNode should be page id_t
 template class BPlusTreeInternalPage<GenericKey<4>, page_id_t, GenericComparator<4>>;

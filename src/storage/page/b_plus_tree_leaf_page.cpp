@@ -42,6 +42,22 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id, in
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetNextPageId() const -> page_id_t { return next_page_id_; }
 
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::Remove(const KeyType &key, KeyComparator &comp)  -> bool { 
+    for (int i = 0; i < this->GetSize(); i++) {
+            if (comp(key, array_[i].first) == 0) {
+              int size = GetSize();
+              for (int j = i; j < size; j++) {
+               array_[j] = array_[j + 1];
+                 }
+                 this->IncreaseSize(-1);
+                 return true;
+            }
+        }
+        return false;
+ }
+
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) {next_page_id_ = next_page_id;}
 
@@ -121,6 +137,21 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::pop() -> MappingType {
     this->IncreaseSize(-1);
     return m;
 }
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::popFront() -> MappingType {
+    MappingType m {};
+    if (GetSize() == 0) return m;
+    int firstIndex = 0;
+    
+ 
+    m = array_[firstIndex];
+    for (int i = 0; i < this->GetSize(); i++) {
+      array_[i] = array_[i + 1];
+    }
+    this->IncreaseSize(-1);
+    return m;
+}
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetSplittingPoint() -> int {
   return ceil((this->GetSize()) / 2);
@@ -131,6 +162,11 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetSplittingPoint() -> int {
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::IsFull() -> bool {
   return this->GetMaxSize() == this->GetSize();
 }
+
+ INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::IsMin()  -> bool {
+  return this->GetMinSize() == this->GetSize();
+ }
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::getFirstElement() -> MappingType {
     MappingType m {};
@@ -139,6 +175,34 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::getFirstElement() -> MappingType {
     }
     return array_[0];
 }
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::ItemAt(int index) -> MappingType &{
+ 
+    return array_[index];
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyIndex(const KeyType &key, const KeyComparator &comparator) const -> int {
+  int size = GetSize();
+
+  int left = 0;
+  int right = size - 1;
+  while (left <= right) {
+    int mid = (left + right) / 2;
+    int ret = comparator(key, array_[mid].first);
+
+    if (ret == 1) {
+      left = mid + 1;
+    } else if (ret == -1) {
+      right = mid - 1;
+    } else {
+      return mid;
+    }
+  }
+
+  return left;
+}
+
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;
 template class BPlusTreeLeafPage<GenericKey<8>, RID, GenericComparator<8>>;
 template class BPlusTreeLeafPage<GenericKey<16>, RID, GenericComparator<16>>;

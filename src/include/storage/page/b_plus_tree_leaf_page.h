@@ -53,9 +53,14 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto GetValue(KeyType k, KeyComparator comp, std::vector<ValueType> *result) -> bool;
   auto GetSplittingPoint() -> int;
   auto pop() -> MappingType;
+  auto popFront() -> MappingType;
   auto IsFull() -> bool;
+  auto IsMin() -> bool;
   auto getFirstElement() -> MappingType;
   auto KeyExist(KeyType k,KeyComparator comp) -> bool;
+  auto Remove(const KeyType &key, KeyComparator &comp)  -> bool;
+  auto  ItemAt(int index) -> MappingType &;
+  auto KeyIndex(const KeyType &key, const KeyComparator &comparator) const -> int;
   private:
   page_id_t next_page_id_;
   // Flexible array member for page data.

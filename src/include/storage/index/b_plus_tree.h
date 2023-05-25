@@ -22,7 +22,7 @@
 namespace bustub {
 
 #define BPLUSTREE_TYPE BPlusTree<KeyType, ValueType, KeyComparator>
-
+enum TRAVERSE_TYPE {INSERT_TRAVERSE, DELETE_TRAVERSE, LOOKUP_TRAVERSE};
 /**
  * Main class providing the API for the Interactive B+ Tree.
  *
@@ -83,23 +83,30 @@ class BPlusTree {
 
   void ToString(BPlusTreePage *page, BufferPoolManager *bpm) const;
  
-  auto FindLeaf(KeyType key, page_id_t currentPageId) -> LeafPage*; 
- 
+  auto FindLeaf(KeyType key, page_id_t currentPageId, TRAVERSE_TYPE traverseType, std::vector<page_id_t>&ancestors) -> LeafPage*; 
+ auto FindLeftMostLeaf(page_id_t currentPageId) -> LeafPage*; 
   auto InsertInFullInternal(const KeyType &k,const page_id_t &Pointer, InternalPage * page, InternalPage**newPage) -> std::pair<KeyType, page_id_t>;
   auto InsertIntoParent(InternalPage *parentNode, KeyType &key, BPlusTreePage *currentPage,page_id_t brotherId, Transaction*trans) -> void;
 
   auto GetInvalidPair() -> std::pair<KeyType, page_id_t>;
   template<typename T>
   auto BuildRootNode(int maxSize) -> T *;
-
- 
+  template<typename T>
+  auto MakeTwin(T * oldNode) -> T *;
+  void HandleLeafDelete(BPlusTreePage* currentPage, const KeyType & key);
+   void HandleInternalDelete(BPlusTreePage* currentPage, const page_id_t value);
+  void ReDistributeLeaf(LeafPage*src, LeafPage * destination, bool pushBack);
+  void Merge(LeafPage*src, LeafPage * destination) ;
+    void MergeInternalPage(InternalPage * src, InternalPage * destination);
   // member variable
   std::string index_name_;
   page_id_t root_page_id_;
   BufferPoolManager *buffer_pool_manager_;
   KeyComparator comparator_;
+  ReaderWriterLatch rootLatch;
   int leaf_max_size_;
   int internal_max_size_;
+ 
 };
 
 }  // namespace bustub
