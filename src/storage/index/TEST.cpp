@@ -26,10 +26,7 @@ namespace bustub {
    */
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
-   
-    bool result = root_page_id_ == INVALID_PAGE_ID;
-  
-    return result;
+    return root_page_id_ == INVALID_PAGE_ID;
   }
   /*****************************************************************************
    * SEARCH
@@ -41,14 +38,9 @@ namespace bustub {
    */
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::GetValue(const KeyType & key, std::vector < ValueType > * result, Transaction * transaction) -> bool {
-    rootLatch.RLock();
-    LeafPage * leafPage = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE, transaction);
-    if (leafPage == 0) {
-      ClearLatches(LOOKUP_TRAVERSE, transaction);
-      return false;
-    }
-    //BUG
-    ClearLatches(LOOKUP_TRAVERSE, transaction);
+     std::vector<page_id_t>ancestors;
+    LeafPage * leafPage = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE, ancestors);
+    if (leafPage == 0) return false;
     return leafPage -> GetValue(key, comparator_, result);
 
   }
@@ -66,6 +58,7 @@ namespace bustub {
   INDEX_TEMPLATE_ARGUMENTS
   template < typename T >
     auto BPLUSTREE_TYPE::BuildRootNode(int maxSize) -> T * {
+      rootLatch.WLock();
       page_id_t currentPageId;
       Page * rawPage = buffer_pool_manager_ -> NewPage( & currentPageId);
       if (rawPage == nullptr) return 0;
@@ -73,34 +66,28 @@ namespace bustub {
       root_page_id_ = currentPageId;
       rootPage -> Init(currentPageId, INVALID_PAGE_ID, maxSize);
       UpdateRootPageId(0);
+      rootLatch.WUnlock();
       return rootPage;
     }
 
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::Insert(const KeyType & key,
     const ValueType & value, Transaction * transaction) -> bool {
-     rootLatch.WLock();
-     LOG_DEBUG("I AQUIRED LOCK ON ROOTLATCH");
-    if (IsEmpty()) {
+    if (root_page_id_ == INVALID_PAGE_ID) {
       //1st Insertion
       LeafPage * rootPage = BuildRootNode < LeafPage > (leaf_max_size_);
       bool result = rootPage -> Insert(key, value, comparator_);
       buffer_pool_manager_ -> UnpinPage(root_page_id_, true);
-      rootLatch.WUnlock();
       return result;
     }
-
-    LeafPage * ourLeaf = FindLeaf(key, root_page_id_, INSERT_TRAVERSE, transaction);
- 
+    std::vector<page_id_t>ancestors;
+    LeafPage * ourLeaf = FindLeaf(key, root_page_id_, INSERT_TRAVERSE, ancestors);
     if (ourLeaf -> KeyExist(key, comparator_)) {
-      ClearLatches(INSERT_TRAVERSE, transaction);
       buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), false);
       return false;
     }
-  
     if (ourLeaf -> IsFull()) {
       //We Need to Split
-      
       LeafPage * returnedLeaf;
       MappingType newPair = std::make_pair(key, value);
       SplitLeafNode(ourLeaf, & returnedLeaf, newPair);
@@ -109,9 +96,6 @@ namespace bustub {
       if (parentId == INVALID_PAGE_ID) {
         //Here i need to create new root 
         parentPage = BuildRootNode < InternalPage > (internal_max_size_);
-        Page* cur = reinterpret_cast<Page*>(parentPage);
-        cur->WLatch();
-        transaction->AddIntoPageSet(cur);
         parentId = parentPage -> GetPageId();
         ourLeaf -> SetParentPageId(parentId);
         returnedLeaf -> SetParentPageId(parentId);
@@ -122,37 +106,24 @@ namespace bustub {
       }
 
       std::pair < KeyType, page_id_t > m = std::make_pair(returnedLeaf -> KeyAt(0), returnedLeaf -> GetPageId());
-      
       InsertIntoParent(parentPage, m.first, returnedLeaf, ourLeaf -> GetPageId(), transaction);
-     
       buffer_pool_manager_ -> UnpinPage(parentId, true);
       buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), true);
       buffer_pool_manager_ -> UnpinPage(returnedLeaf -> GetPageId(), true);
-      
-      ClearLatches(INSERT_TRAVERSE, transaction);
- 
- 
-          LOG_DEBUG("isnert into parent..");
+
       return true;
     } else {
-      
       bool result = ourLeaf -> Insert(key, value, comparator_);
       buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), result);
-         rootLatch.WUnlock();
-         LOG_DEBUG("INSERTIONNN/n");
-       ClearLatches(INSERT_TRAVERSE, transaction);
-       
-          
       return result;
     }
   }
 
   INDEX_TEMPLATE_ARGUMENTS
-  auto BPLUSTREE_TYPE::FindLeaf(KeyType key, page_id_t pageId,   TRAVERSE_TYPE traverseType, Transaction *transaction) -> LeafPage * {
+  auto BPLUSTREE_TYPE::FindLeaf(KeyType key, page_id_t pageId,   TRAVERSE_TYPE traverseType, std::vector<page_id_t>&ancestors) -> LeafPage * {
     Page * rawPage = buffer_pool_manager_ -> FetchPage(pageId);
     if (rawPage == nullptr) return 0;
- 
-    HandleLatches(rawPage, traverseType, transaction);
+
     BPlusTreePage * currentPage = reinterpret_cast < BPlusTreePage * > (rawPage -> GetData());
     if (currentPage -> IsLeafPage()) {
       LeafPage * myPage = reinterpret_cast < LeafPage * > (rawPage -> GetData());
@@ -172,9 +143,8 @@ namespace bustub {
       if (found == false) {
         childPosition = myPage -> ValueAt(myPage -> GetArraySize() - 1);
       }
-      //BUG
-      // buffer_pool_manager_ -> UnpinPage(pageId, false);
-      return FindLeaf(key, childPosition, traverseType, transaction);
+      buffer_pool_manager_ -> UnpinPage(pageId, false);
+      return FindLeaf(key, childPosition, traverseType, ancestors);
     }
 
   }
@@ -283,9 +253,7 @@ namespace bustub {
       if (rawPage == nullptr) return GetInvalidPair();
       BPlusTreePage * BPage = reinterpret_cast < BPlusTreePage * > (rawPage -> GetData());
       BPage -> SetParentPageId(newInternalPage -> GetPageId());
-      //BUG
-      // buffer_pool_manager_ -> UnpinPage(newInternalPage -> GetPageId(), true);
-      buffer_pool_manager_ -> UnpinPage(currentPageId, true);
+      buffer_pool_manager_ -> UnpinPage(newInternalPage -> GetPageId(), true);
     }
     //Median + 1 is sent to the caller so he insert it to the parent 
     std::pair < KeyType,
@@ -304,7 +272,6 @@ namespace bustub {
       if (parentPageId == INVALID_PAGE_ID) {
         //Here i need to create new rgit oot 
         parentPage = BuildRootNode < InternalPage > (internal_max_size_);
-   
         if (parentPage == 0) return;
         parentPageId = parentPage -> GetPageId();
       } else {
@@ -340,8 +307,8 @@ namespace bustub {
   INDEX_TEMPLATE_ARGUMENTS
   void BPLUSTREE_TYPE::Remove(const KeyType & key, Transaction * transaction) {
     LOG_DEBUG("IM HERE");
-  
-    LeafPage * foundLeaf = FindLeaf(key, root_page_id_, DELETE_TRAVERSE, transaction);
+    std::vector<page_id_t>ancestors;
+    LeafPage * foundLeaf = FindLeaf(key, root_page_id_, DELETE_TRAVERSE, ancestors);
     if (!foundLeaf -> KeyExist(key, comparator_)) {
       return;
     }
@@ -349,7 +316,6 @@ namespace bustub {
     if (foundLeaf -> IsRootPage() && foundLeaf -> GetSize() >= 1) {
       foundLeaf -> Remove(key, comparator_);
       if (foundLeaf -> IsRootPage() && foundLeaf -> GetSize() == 0) {
-        transaction->AddIntoDeletedPageSet(root_page_id_);
         root_page_id_ = INVALID_PAGE_ID;
         UpdateRootPageId(0);
         return;
@@ -367,7 +333,7 @@ namespace bustub {
   }
   INDEX_TEMPLATE_ARGUMENTS
   void BPLUSTREE_TYPE::HandleLeafDelete(BPlusTreePage * currentPage,
-    const KeyType & key, Transaction *transaction) {
+    const KeyType & key) {
     page_id_t currentPageId = currentPage -> GetPageId();
     bool sucess = false;
     if (currentPage -> IsLeafPage()) {
@@ -420,14 +386,12 @@ namespace bustub {
           currentLeafPage -> Remove(key, comparator_);
           Merge(currentLeafPage, leftBrotherPage);
           // parentPage->Remove(currentPageId);
-          transaction->AddIntoDeletedPageSet(currentPageId);
-          HandleInternalDelete(parentPage, currentPageId, transaction);
+          HandleInternalDelete(parentPage, currentPageId);
           sucess = true;
         } else if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
           currentLeafPage -> Remove(key, comparator_);
           Merge(rightBrotherPage, currentLeafPage);
-          transaction->AddIntoDeletedPageSet(rightBrotherId);
-          HandleInternalDelete(parentPage, rightBrotherId, transaction);
+          HandleInternalDelete(parentPage, rightBrotherId);
           // parentPage->Remove(rightBrotherId);//
 
           sucess = true;
@@ -441,7 +405,7 @@ namespace bustub {
 
   INDEX_TEMPLATE_ARGUMENTS
   void BPLUSTREE_TYPE::HandleInternalDelete(BPlusTreePage * currentPage,
-    const page_id_t value, Transaction *transaction) {
+    const page_id_t value) {
 
       if (currentPage->IsRootPage()) {
         
@@ -534,9 +498,8 @@ namespace bustub {
             page->SetParentPageId(leftBrotherPage->GetPageId());
             buffer_pool_manager_->UnpinPage(child->GetPageId(), true);
             MergeInternalPage(currentInternalPage, leftBrotherPage);
-            transaction->AddIntoDeletedPageSet(currentPageId);
             // parentPage->Remove(currentPageId);
-            HandleInternalDelete(parentPage, currentPageId, transaction);
+            HandleInternalDelete(parentPage, currentPageId);
             sucess = true;
           } else if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
             currentInternalPage -> Remove(value);
@@ -549,8 +512,7 @@ namespace bustub {
             buffer_pool_manager_->UnpinPage(child->GetPageId(), true);
             MergeInternalPage(rightBrotherPage, currentInternalPage);
             // parentPage->Remove(currentPageId);
-            transaction->AddIntoDeletedPageSet(rightBrotherId);
-            HandleInternalDelete(parentPage, rightBrotherId, transaction);
+            HandleInternalDelete(parentPage, rightBrotherId);
             sucess = true;
           }
         }
@@ -613,8 +575,8 @@ namespace bustub {
    */
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::Begin(const KeyType & key) -> INDEXITERATOR_TYPE {
-
-    LeafPage *currentLeaf = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE);
+    std::vector<page_id_t>ancestors;
+    LeafPage *currentLeaf = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE, ancestors);
     int index = currentLeaf->KeyIndex(key, comparator_);
     return INDEXITERATOR_TYPE(currentLeaf->GetPageId(), buffer_pool_manager_, index);
   }
@@ -890,64 +852,8 @@ namespace bustub {
       newPage -> Init(newPageId, oldNode -> GetParentPageId(), oldNode -> GetMaxSize());
       return newPage;
     }
-  INDEX_TEMPLATE_ARGUMENTS
- void BPLUSTREE_TYPE::HandleLatches(Page *page, TRAVERSE_TYPE type, Transaction*transaction) {
-  if (transaction == nullptr) return;
-    BPlusTreePage *BPage = reinterpret_cast<BPlusTreePage*>(page);
-  if (type == INSERT_TRAVERSE) {
-    page->WLatch();
-    if (!(BPage->GetMaxSize() == BPage->GetSize())) {
-       ClearLatches(type, transaction);
-    }
-    transaction->AddIntoPageSet(page);
-  } else if(type == DELETE_TRAVERSE) {
-    page->WLatch();
-    if (!(BPage->GetMinSize() == BPage->GetSize())) {
-       ClearLatches(type, transaction);
-    }
-        transaction->AddIntoPageSet(page);
-  } else if (type == LOOKUP_TRAVERSE) {
-    page->RLatch();
-    ClearLatches(type, transaction);
-    transaction->AddIntoPageSet(page);
-  }
 
- }
-  INDEX_TEMPLATE_ARGUMENTS
- void BPLUSTREE_TYPE::ClearLatches(TRAVERSE_TYPE type, Transaction*transaction) {
- if (transaction == nullptr) {
-    return;
-  }
-  std::shared_ptr<std::deque<Page *>> queue = transaction->GetPageSet();
-  while (!queue->empty()) {
-    Page *page = queue->front();
-    queue->pop_front();
-    BPlusTreePage *BPage = reinterpret_cast<BPlusTreePage*>(page);
-    if (BPage->IsRootPage()) {
-      if (type == INSERT_TRAVERSE || type == DELETE_TRAVERSE) {
-        LOG_DEBUG("IM UNLOCKING THE ROOT NOW ");
-        rootLatch.WUnlock();
-        page->WUnlatch();
-        buffer_pool_manager_->UnpinPage(page->GetPageId(), true  );
-        
-      } else if (type == LOOKUP_TRAVERSE) {
-                LOG_DEBUG("IM UNLOCKING THER READ LOCK ON  ROOT NOW ");
-        rootLatch.RUnlock();
-        page->RUnlatch();
-        buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-      }
-    } else {
-      if (type == INSERT_TRAVERSE || type == DELETE_TRAVERSE) {
-          page->WUnlatch();
-           buffer_pool_manager_->UnpinPage(page->GetPageId(), true);
-      } else if (type == LOOKUP_TRAVERSE) {
-          page->RUnlatch();
-           buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-      }
-    }
-  }
-  
- }
+
     
   template class BPlusTree < GenericKey < 4 > , RID, GenericComparator < 4 >> ;
   template class BPlusTree < GenericKey < 8 > , RID, GenericComparator < 8 >> ;
