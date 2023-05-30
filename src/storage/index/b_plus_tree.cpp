@@ -42,8 +42,10 @@ namespace bustub {
     rootLatch.RLock();
     transaction->AddIntoPageSet(nullptr);
     }
+    LOG_DEBUG("bringing the key:");
      LeafPage * leafPage = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE, transaction);
      if (leafPage == 0) { 
+      LOG_DEBUG("NO PLACE IN BPM");
       ClearLatches(LOOKUP_TRAVERSE,transaction, false);
       return false;
     }
@@ -91,6 +93,7 @@ namespace bustub {
       //1st Insertion
       LeafPage * rootPage = BuildRootNode < LeafPage > (leaf_max_size_);
       bool result = rootPage -> Insert(key, value, comparator_);
+      buffer_pool_manager_->UnpinPage(rootPage->GetPageId(), true);
       ClearLatches(INSERT_TRAVERSE, transaction, true);
       return result;
     }
