@@ -373,7 +373,7 @@ TEST(BPlusTreeTests, InsertTest2Moidified) {
   for (auto key : keys) {
     rids.clear();
     index_key.SetFromInteger(key);
-    ASSERT_EQ(tree.GetValue(index_key, &rids),true);
+    ASSERT_EQ(tree.GetValue(index_key, &rids, transaction),true);
     EXPECT_EQ(rids.size(), 1);
 
     int64_t value = key & 0xFFFFFFFF;
@@ -388,7 +388,7 @@ TEST(BPlusTreeTests, InsertTest2Moidified) {
   for (auto key : keys) {
     rids.clear();
     index_key.SetFromInteger(key);
-    is_present = tree.GetValue(index_key, &rids);
+    is_present = tree.GetValue(index_key, &rids, transaction);
 
     EXPECT_EQ(is_present, true);
     EXPECT_EQ(rids.size(), 1);

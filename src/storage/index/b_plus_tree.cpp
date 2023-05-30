@@ -38,11 +38,20 @@ namespace bustub {
    */
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::GetValue(const KeyType & key, std::vector < ValueType > * result, Transaction * transaction) -> bool {
- 
-    LeafPage * leafPage = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE);
-    if (leafPage == 0) return false;
+    if (transaction != nullptr) {
+    rootLatch.RLock();
+    transaction->AddIntoPageSet(nullptr);
+    }
+     LeafPage * leafPage = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE, transaction);
+     if (leafPage == 0) { 
+      ClearLatches(LOOKUP_TRAVERSE,transaction, false);
+      return false;
+    }
     //BUG
-    return leafPage -> GetValue(key, comparator_, result);
+ 
+     bool isSucess  = leafPage -> GetValue(key, comparator_, result);
+     ClearLatches(LOOKUP_TRAVERSE,transaction, false);
+    return  isSucess;
 
   }
 
@@ -59,32 +68,36 @@ namespace bustub {
   INDEX_TEMPLATE_ARGUMENTS
   template < typename T >
     auto BPLUSTREE_TYPE::BuildRootNode(int maxSize) -> T * {
-       
+
       page_id_t currentPageId;
       Page * rawPage = buffer_pool_manager_ -> NewPage( & currentPageId);
       if (rawPage == nullptr) return 0;
       T * rootPage = reinterpret_cast < T * > (rawPage -> GetData());
       root_page_id_ = currentPageId;
       rootPage -> Init(currentPageId, INVALID_PAGE_ID, maxSize);
+
       UpdateRootPageId(0);
-      
       return rootPage;
     }
 
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::Insert(const KeyType & key,
     const ValueType & value, Transaction * transaction) -> bool {
+      if (transaction != nullptr) {
+    rootLatch.WLock();
+    transaction -> AddIntoPageSet(nullptr);
+      }
     if (root_page_id_ == INVALID_PAGE_ID) {
       //1st Insertion
       LeafPage * rootPage = BuildRootNode < LeafPage > (leaf_max_size_);
       bool result = rootPage -> Insert(key, value, comparator_);
-      buffer_pool_manager_ -> UnpinPage(root_page_id_, true);
+      ClearLatches(INSERT_TRAVERSE, transaction, true);
       return result;
     }
-   
-    LeafPage * ourLeaf = FindLeaf(key, root_page_id_, INSERT_TRAVERSE);
+ 
+    LeafPage * ourLeaf = FindLeaf(key, root_page_id_, INSERT_TRAVERSE, transaction);
     if (ourLeaf -> KeyExist(key, comparator_)) {
-      buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), false);
+      ClearLatches(INSERT_TRAVERSE, transaction, false);
       return false;
     }
     if (ourLeaf -> IsFull()) {
@@ -108,24 +121,26 @@ namespace bustub {
 
       std::pair < KeyType, page_id_t > m = std::make_pair(returnedLeaf -> KeyAt(0), returnedLeaf -> GetPageId());
       InsertIntoParent(parentPage, m.first, returnedLeaf, ourLeaf -> GetPageId(), transaction);
-      buffer_pool_manager_ -> UnpinPage(parentId, true);
-      buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), true);
-      buffer_pool_manager_ -> UnpinPage(returnedLeaf -> GetPageId(), true);
-
+      ClearLatches(INSERT_TRAVERSE, transaction, true);
+       buffer_pool_manager_ -> UnpinPage(parentId, true);
+      // buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), true);
+        buffer_pool_manager_ -> UnpinPage(returnedLeaf -> GetPageId(), true);
+       
       return true;
     } else {
       bool result = ourLeaf -> Insert(key, value, comparator_);
       //BUG
-      buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), result);
+      // buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), result);
+       ClearLatches(INSERT_TRAVERSE, transaction, result);
       return result;
     }
   }
 
   INDEX_TEMPLATE_ARGUMENTS
-  auto BPLUSTREE_TYPE::FindLeaf(KeyType key, page_id_t pageId,   TRAVERSE_TYPE traverseType) -> LeafPage * {
+  auto BPLUSTREE_TYPE::FindLeaf(KeyType key, page_id_t pageId, TRAVERSE_TYPE traverseType, Transaction * transaction) -> LeafPage * {
     Page * rawPage = buffer_pool_manager_ -> FetchPage(pageId);
     if (rawPage == nullptr) return 0;
-
+    HandleLatches(rawPage, traverseType, transaction, false);
     BPlusTreePage * currentPage = reinterpret_cast < BPlusTreePage * > (rawPage -> GetData());
     if (currentPage -> IsLeafPage()) {
       LeafPage * myPage = reinterpret_cast < LeafPage * > (rawPage -> GetData());
@@ -145,12 +160,13 @@ namespace bustub {
       if (found == false) {
         childPosition = myPage -> ValueAt(myPage -> GetArraySize() - 1);
       }
-      buffer_pool_manager_ -> UnpinPage(pageId, false);
-      return FindLeaf(key, childPosition, traverseType);
+      //BUG
+      // buffer_pool_manager_ -> UnpinPage(pageId, false);
+      return FindLeaf(key, childPosition, traverseType, transaction);
     }
 
   }
- INDEX_TEMPLATE_ARGUMENTS
+  INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::FindLeftMostLeaf(page_id_t pageId) -> LeafPage * {
     Page * rawPage = buffer_pool_manager_ -> FetchPage(pageId);
     if (rawPage == nullptr) return 0;
@@ -162,7 +178,7 @@ namespace bustub {
     } else {
       //This is internal node
       InternalPage * myPage = reinterpret_cast < InternalPage * > (rawPage -> GetData());
-      page_id_t childPosition = myPage->ValueAt(0);
+      page_id_t childPosition = myPage -> ValueAt(0);
       buffer_pool_manager_ -> UnpinPage(pageId, false);
       return FindLeftMostLeaf(childPosition);
     }
@@ -232,8 +248,7 @@ namespace bustub {
       page_id_t leftPointer = oldInternalPage -> ValueAt(i - 1);
       page_id_t rightPointer = oldInternalPage -> ValueAt(i);
       KeyType key = oldInternalPage -> KeyAt(i);
-      LOG_DEBUG("I am insterting to temprary the left value %d", leftPointer);
-      temporaryPage.Insert(leftPointer, key, rightPointer, comparator_);
+       temporaryPage.Insert(leftPointer, key, rightPointer, comparator_);
     }
     temporaryPage.InsertAndShift(k, Pointer, comparator_);
 
@@ -309,10 +324,13 @@ namespace bustub {
    */
   INDEX_TEMPLATE_ARGUMENTS
   void BPLUSTREE_TYPE::Remove(const KeyType & key, Transaction * transaction) {
-    LOG_DEBUG("IM HERE");
-
-    LeafPage * foundLeaf = FindLeaf(key, root_page_id_, DELETE_TRAVERSE);
+    if (transaction != nullptr) {
+      rootLatch.WLock();
+      transaction->AddIntoPageSet(nullptr);
+    }
+    LeafPage * foundLeaf = FindLeaf(key, root_page_id_, DELETE_TRAVERSE, transaction);
     if (!foundLeaf -> KeyExist(key, comparator_)) {
+      ClearLatches(DELETE_TRAVERSE, transaction, false);
       return;
     }
     //If The Root is the Leaf
@@ -321,23 +339,25 @@ namespace bustub {
       if (foundLeaf -> IsRootPage() && foundLeaf -> GetSize() == 0) {
         root_page_id_ = INVALID_PAGE_ID;
         UpdateRootPageId(0);
-        transaction->AddIntoDeletedPageSet(root_page_id_);
+        transaction -> AddIntoDeletedPageSet(root_page_id_);
+         ClearLatches(DELETE_TRAVERSE, transaction, true);
         return;
       }
     }
 
     if (foundLeaf -> IsMin()) {
       //Here We Go
-      HandleLeafDelete(foundLeaf, key);
+      HandleLeafDelete(foundLeaf, key, transaction);
 
     } else {
       foundLeaf -> Remove(key, comparator_);
+      ClearLatches(DELETE_TRAVERSE, transaction, true);
     }
 
   }
   INDEX_TEMPLATE_ARGUMENTS
   void BPLUSTREE_TYPE::HandleLeafDelete(BPlusTreePage * currentPage,
-    const KeyType & key) {
+    const KeyType & key, Transaction * transaction) {
     page_id_t currentPageId = currentPage -> GetPageId();
     bool sucess = false;
     if (currentPage -> IsLeafPage()) {
@@ -348,7 +368,7 @@ namespace bustub {
       page_id_t leftBrotherId = parentPage -> GetLeftSibling(currentPageId);
       page_id_t rightBrotherId = parentPage -> GetRightSibling(currentPageId);
       //Check if one of them can give me  item so i become balanced
- 
+
       LeafPage * leftBrotherPage;
       LeafPage * rightBrotherPage;
       if (leftBrotherId != INVALID_PAGE_ID) {
@@ -389,15 +409,15 @@ namespace bustub {
         if (leftBrotherId != INVALID_PAGE_ID) {
           currentLeafPage -> Remove(key, comparator_);
           Merge(currentLeafPage, leftBrotherPage);
-          transaction->AddIntoDeletedPageSet(currentPageId);
+          transaction -> AddIntoDeletedPageSet(currentPageId);
           // parentPage->Remove(currentPageId);
-          HandleInternalDelete(parentPage, currentPageId);
+          HandleInternalDelete(parentPage, currentPageId, transaction);
           sucess = true;
         } else if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
           currentLeafPage -> Remove(key, comparator_);
           Merge(rightBrotherPage, currentLeafPage);
-          transaction->AddIntoDeletedPageSet(rightBrotherId);
-          HandleInternalDelete(parentPage, rightBrotherId);
+          transaction -> AddIntoDeletedPageSet(rightBrotherId);
+          HandleInternalDelete(parentPage, rightBrotherId, transaction);
           // parentPage->Remove(rightBrotherId);//
 
           sucess = true;
@@ -411,22 +431,22 @@ namespace bustub {
 
   INDEX_TEMPLATE_ARGUMENTS
   void BPLUSTREE_TYPE::HandleInternalDelete(BPlusTreePage * currentPage,
-    const page_id_t value) {
+    const page_id_t value, Transaction * transaction) {
 
-      if (currentPage->IsRootPage()) {
-        
-        InternalPage * currentInternalPage = reinterpret_cast < InternalPage * > (currentPage);
-        currentInternalPage->Remove(value);
-        if (currentPage->GetSize() == 0) {
-        page_id_t newRootId = reinterpret_cast < InternalPage * >(currentPage)->ValueAt(0);
+    if (currentPage -> IsRootPage()) {
+
+      InternalPage * currentInternalPage = reinterpret_cast < InternalPage * > (currentPage);
+      currentInternalPage -> Remove(value);
+      if (currentPage -> GetSize() == 0) {
+        page_id_t newRootId = reinterpret_cast < InternalPage * > (currentPage) -> ValueAt(0);
         Page * newRootPage = buffer_pool_manager_ -> FetchPage(newRootId);
-        reinterpret_cast<BPlusTreePage*>(newRootPage)->SetParentPageId(INVALID_PAGE_ID);
+        reinterpret_cast < BPlusTreePage * > (newRootPage) -> SetParentPageId(INVALID_PAGE_ID);
         root_page_id_ = newRootId;
         UpdateRootPageId(0);
-        buffer_pool_manager_ -> UnpinPage(currentPage->GetPageId(), true);
-        }
-        return;
+        buffer_pool_manager_ -> UnpinPage(currentPage -> GetPageId(), true);
       }
+      return;
+    }
     if (currentPage -> IsInternalPage()) {
       InternalPage * currentInternalPage = reinterpret_cast < InternalPage * > (currentPage);
       if (!currentInternalPage -> IsMin()) {
@@ -435,98 +455,96 @@ namespace bustub {
       }
 
       //Here we go
-         page_id_t currentPageId = currentPage -> GetPageId();
-         bool sucess = false;
-        Page * rawParentPage = buffer_pool_manager_ -> FetchPage(currentPage -> GetParentPageId());
-        if (rawParentPage == nullptr) return;
-     
-        InternalPage * parentPage = reinterpret_cast < InternalPage * > (rawParentPage -> GetData());
-        page_id_t leftBrotherId = parentPage -> GetLeftSibling(currentPageId);
-         page_id_t rightBrotherId = parentPage -> GetRightSibling(currentPageId);
-        InternalPage * leftBrotherPage;
-         InternalPage * rightBrotherPage;
+      page_id_t currentPageId = currentPage -> GetPageId();
+      bool sucess = false;
+      Page * rawParentPage = buffer_pool_manager_ -> FetchPage(currentPage -> GetParentPageId());
+      if (rawParentPage == nullptr) return;
+
+      InternalPage * parentPage = reinterpret_cast < InternalPage * > (rawParentPage -> GetData());
+      page_id_t leftBrotherId = parentPage -> GetLeftSibling(currentPageId);
+      page_id_t rightBrotherId = parentPage -> GetRightSibling(currentPageId);
+      InternalPage * leftBrotherPage;
+      InternalPage * rightBrotherPage;
+      if (leftBrotherId != INVALID_PAGE_ID) {
+        Page * rawLeftBrother = buffer_pool_manager_ -> FetchPage(leftBrotherId);
+        if (rawLeftBrother == nullptr) return;
+        leftBrotherPage = reinterpret_cast < InternalPage * > (rawLeftBrother -> GetData());
+        if (!leftBrotherPage -> IsMin()) {
+          currentInternalPage -> Remove(value);
+          std::pair < KeyType, page_id_t > movedPairs = leftBrotherPage -> pop();
+          //Say to the pooped element the new father
+          currentInternalPage -> pushFront(movedPairs.first, movedPairs.second);
+
+          //Then Swapping
+          currentInternalPage -> SetKeyAt(1, parentPage -> GetKeyOfValue(currentPageId));
+          parentPage -> ChangeKeyOfValue(currentPageId, movedPairs.first);
+          Page * movedPage = buffer_pool_manager_ -> FetchPage(movedPairs.second);
+          BPlusTreePage * BmovedPage = reinterpret_cast < BPlusTreePage * > (movedPage);
+          BmovedPage -> SetParentPageId(currentInternalPage -> GetPageId());
+          sucess = true;
+          buffer_pool_manager_ -> UnpinPage(movedPairs.second, true);
+          buffer_pool_manager_ -> UnpinPage(leftBrotherId, true);
+        }
+      }
+      if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
+        //if the previous step failed try with the right brother
+        Page * rawRightBrother = buffer_pool_manager_ -> FetchPage(rightBrotherId);
+        if (rawRightBrother == nullptr) return;
+        rightBrotherPage = reinterpret_cast < InternalPage * > (rawRightBrother -> GetData());
+        if (!rightBrotherPage -> IsMin()) {
+          currentInternalPage -> Remove(value);
+          std::pair < KeyType, page_id_t > movedPairs = rightBrotherPage -> popFront();
+          //Say to the pooped element the new father
+          currentInternalPage -> pushBack(movedPairs.first, movedPairs.second);
+
+          //Then Swapping
+          currentInternalPage -> SetKeyAt(currentInternalPage -> GetArraySize() - 1, parentPage -> GetKeyOfValue(rightBrotherId));
+          parentPage -> ChangeKeyOfValue(rightBrotherId, movedPairs.first);
+          Page * movedPage = buffer_pool_manager_ -> FetchPage(movedPairs.second);
+          BPlusTreePage * BmovedPage = reinterpret_cast < BPlusTreePage * > (movedPage);
+          BmovedPage -> SetParentPageId(currentInternalPage -> GetPageId());
+          sucess = true;
+          buffer_pool_manager_ -> UnpinPage(movedPairs.second, true);
+          buffer_pool_manager_ -> UnpinPage(leftBrotherId, true);
+        }
+      }
+      if (!sucess) {
+        //Here i have to merge 
+
+        //we will start looking for merge opportinutiy at the left
         if (leftBrotherId != INVALID_PAGE_ID) {
-          Page * rawLeftBrother = buffer_pool_manager_ -> FetchPage(leftBrotherId);
-          if (rawLeftBrother == nullptr) return;
-          leftBrotherPage = reinterpret_cast < InternalPage * > (rawLeftBrother -> GetData());
-          if (!leftBrotherPage -> IsMin()) {
-            currentInternalPage->Remove(value);
-            std::pair<KeyType,page_id_t> movedPairs =  leftBrotherPage->pop();
-            //Say to the pooped element the new father
-            currentInternalPage->pushFront(movedPairs.first,movedPairs.second);
-
-
-            //Then Swapping
-            currentInternalPage->SetKeyAt(1, parentPage->GetKeyOfValue(currentPageId));
-            parentPage->ChangeKeyOfValue(currentPageId, movedPairs.first);
-            Page * movedPage = buffer_pool_manager_ -> FetchPage(movedPairs.second);
-            BPlusTreePage* BmovedPage = reinterpret_cast < BPlusTreePage * > (movedPage );
-            BmovedPage->SetParentPageId(currentInternalPage->GetPageId());
-              sucess = true;
-            buffer_pool_manager_ -> UnpinPage(movedPairs.second , true);
-            buffer_pool_manager_ -> UnpinPage(leftBrotherId , true);  
-          }
+          currentInternalPage -> Remove(value);
+          KeyType topKey = parentPage -> GetKeyOfValue(currentPageId);
+          page_id_t firstPageId = currentInternalPage -> ValueAt(0);
+          leftBrotherPage -> InsertAndShift(topKey, firstPageId, comparator_);
+          Page * child = buffer_pool_manager_ -> FetchPage(firstPageId);
+          BPlusTreePage * page = reinterpret_cast < BPlusTreePage * > (child);
+          page -> SetParentPageId(leftBrotherPage -> GetPageId());
+          buffer_pool_manager_ -> UnpinPage(child -> GetPageId(), true);
+          MergeInternalPage(currentInternalPage, leftBrotherPage);
+          transaction -> AddIntoDeletedPageSet(currentPageId);
+          // parentPage->Remove(currentPageId);
+          HandleInternalDelete(parentPage, currentPageId, transaction);
+          sucess = true;
+        } else if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
+          currentInternalPage -> Remove(value);
+          KeyType topKey = parentPage -> GetKeyOfValue(rightBrotherId);
+          page_id_t firstPageId = rightBrotherPage -> ValueAt(0);
+          currentInternalPage -> InsertAndShift(topKey, firstPageId, comparator_);
+          Page * child = buffer_pool_manager_ -> FetchPage(firstPageId);
+          BPlusTreePage * page = reinterpret_cast < BPlusTreePage * > (child);
+          page -> SetParentPageId(currentInternalPage -> GetPageId());
+          buffer_pool_manager_ -> UnpinPage(child -> GetPageId(), true);
+          MergeInternalPage(rightBrotherPage, currentInternalPage);
+          transaction -> AddIntoDeletedPageSet(rightBrotherId);
+          // parentPage->Remove(currentPageId);
+          HandleInternalDelete(parentPage, rightBrotherId, transaction);
+          sucess = true;
         }
-        if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
-          //if the previous step failed try with the right brother
-          Page * rawRightBrother = buffer_pool_manager_ -> FetchPage(rightBrotherId);
-          if (rawRightBrother == nullptr) return;
-          rightBrotherPage = reinterpret_cast < InternalPage * > (rawRightBrother -> GetData());
-          if (!rightBrotherPage -> IsMin()) {
-            currentInternalPage->Remove(value);
-            std::pair<KeyType,page_id_t> movedPairs =  rightBrotherPage->popFront();
-            //Say to the pooped element the new father
-            currentInternalPage->pushBack(movedPairs.first,movedPairs.second);
+      }
 
-
-            //Then Swapping
-            currentInternalPage->SetKeyAt(currentInternalPage->GetArraySize() - 1, parentPage->GetKeyOfValue(rightBrotherId));
-            parentPage->ChangeKeyOfValue(rightBrotherId, movedPairs.first);
-            Page * movedPage = buffer_pool_manager_ -> FetchPage(movedPairs.second);
-            BPlusTreePage* BmovedPage = reinterpret_cast < BPlusTreePage * > (movedPage );
-            BmovedPage->SetParentPageId(currentInternalPage->GetPageId());
-              sucess = true;
-            buffer_pool_manager_ -> UnpinPage(movedPairs.second , true);
-            buffer_pool_manager_ -> UnpinPage(leftBrotherId , true);  
-          }
-        }
-        if (!sucess) {
-          //Here i have to merge 
-
-          //we will start looking for merge opportinutiy at the left
-          if (leftBrotherId != INVALID_PAGE_ID) {
-            currentInternalPage -> Remove(value);
-            KeyType topKey = parentPage->GetKeyOfValue(currentPageId);
-            page_id_t firstPageId = currentInternalPage->ValueAt(0);
-            leftBrotherPage->InsertAndShift(topKey, firstPageId, comparator_); 
-            Page * child = buffer_pool_manager_ -> FetchPage(firstPageId);
-            BPlusTreePage *page = reinterpret_cast<BPlusTreePage*>(child);
-            page->SetParentPageId(leftBrotherPage->GetPageId());
-            buffer_pool_manager_->UnpinPage(child->GetPageId(), true);
-            MergeInternalPage(currentInternalPage, leftBrotherPage);
-            transaction->AddIntoDeletedPageSet(currentPageId);
-            // parentPage->Remove(currentPageId);
-            HandleInternalDelete(parentPage, currentPageId);
-            sucess = true;
-          } else if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
-            currentInternalPage -> Remove(value);
-            KeyType topKey = parentPage->GetKeyOfValue(rightBrotherId);
-            page_id_t firstPageId = rightBrotherPage->ValueAt(0);
-            currentInternalPage->InsertAndShift(topKey, firstPageId, comparator_); 
-            Page * child = buffer_pool_manager_ -> FetchPage(firstPageId);
-            BPlusTreePage *page = reinterpret_cast<BPlusTreePage*>(child);
-            page->SetParentPageId(currentInternalPage->GetPageId());
-            buffer_pool_manager_->UnpinPage(child->GetPageId(), true);
-            MergeInternalPage(rightBrotherPage, currentInternalPage);
-            transaction->AddIntoDeletedPageSet(rightBrotherId);
-            // parentPage->Remove(currentPageId);
-            HandleInternalDelete(parentPage, rightBrotherId);
-            sucess = true;
-          }
-        }
-   
       buffer_pool_manager_ -> UnpinPage(currentPageId, true);
-    } 
+    }
   }
   INDEX_TEMPLATE_ARGUMENTS
   void BPLUSTREE_TYPE::ReDistributeLeaf(LeafPage * src, LeafPage * destination, bool popBack) {
@@ -548,17 +566,17 @@ namespace bustub {
     destination -> SetNextPageId(src -> GetNextPageId());
   }
 
-    INDEX_TEMPLATE_ARGUMENTS
+  INDEX_TEMPLATE_ARGUMENTS
   void BPLUSTREE_TYPE::MergeInternalPage(InternalPage * src, InternalPage * destination) {
-    int length = src->GetArraySize();
-      for (int i = 1; i < length; i++) {
-          std::pair<KeyType, page_id_t>pair = src->pop();
-          destination->InsertAndShift(pair.first, pair.second, comparator_);
-          Page * child = buffer_pool_manager_ -> FetchPage(pair.second);
-          BPlusTreePage *page = reinterpret_cast<BPlusTreePage*>(child);
-          page->SetParentPageId(destination->GetPageId());
-          buffer_pool_manager_->UnpinPage(child->GetPageId(), true);
-      }
+    int length = src -> GetArraySize();
+    for (int i = 1; i < length; i++) {
+      std::pair < KeyType, page_id_t > pair = src -> pop();
+      destination -> InsertAndShift(pair.first, pair.second, comparator_);
+      Page * child = buffer_pool_manager_ -> FetchPage(pair.second);
+      BPlusTreePage * page = reinterpret_cast < BPlusTreePage * > (child);
+      page -> SetParentPageId(destination -> GetPageId());
+      buffer_pool_manager_ -> UnpinPage(child -> GetPageId(), true);
+    }
   }
   /*****************************************************************************
    * INDEX ITERATOR
@@ -572,8 +590,8 @@ namespace bustub {
   auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
     //I will create iterator that has in its current state the most left leaf so i wanna give him this id !
     LeafPage * leftMostLeaf = FindLeftMostLeaf(root_page_id_);
-    buffer_pool_manager_->UnpinPage(leftMostLeaf->GetPageId(), false);
-    return INDEXITERATOR_TYPE(leftMostLeaf->GetPageId(), buffer_pool_manager_, 0);
+    buffer_pool_manager_ -> UnpinPage(leftMostLeaf -> GetPageId(), false);
+    return INDEXITERATOR_TYPE(leftMostLeaf -> GetPageId(), buffer_pool_manager_, 0);
   }
 
   /*
@@ -583,10 +601,10 @@ namespace bustub {
    */
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::Begin(const KeyType & key) -> INDEXITERATOR_TYPE {
-    
-    LeafPage *currentLeaf = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE);
-    int index = currentLeaf->KeyIndex(key, comparator_);
-    return INDEXITERATOR_TYPE(currentLeaf->GetPageId(), buffer_pool_manager_, index);
+
+    LeafPage * currentLeaf = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE);
+    int index = currentLeaf -> KeyIndex(key, comparator_);
+    return INDEXITERATOR_TYPE(currentLeaf -> GetPageId(), buffer_pool_manager_, index);
   }
 
   /*
@@ -862,64 +880,73 @@ namespace bustub {
     }
 
   INDEX_TEMPLATE_ARGUMENTS
- void BPLUSTREE_TYPE::HandleLatches(Page *page, TRAVERSE_TYPE type, Transaction*transaction) {
-  if (transaction == nullptr) return;
-    BPlusTreePage *BPage = reinterpret_cast<BPlusTreePage*>(page);
-  if (type == INSERT_TRAVERSE) {
-    page->WLatch();
-    if (!(BPage->GetMaxSize() == BPage->GetSize())) {
-       ClearLatches(type, transaction);
+  void BPLUSTREE_TYPE::HandleLatches(Page * page, TRAVERSE_TYPE type, Transaction * transaction, bool isChanged) {
+    if (transaction == nullptr) return;
+    BPlusTreePage * BPage = reinterpret_cast < BPlusTreePage * > (page);
+    if (type == INSERT_TRAVERSE) {
+      page -> WLatch();
+      if (!(BPage -> GetMaxSize() == BPage -> GetSize()) && !BPage->IsRootPage()) {
+        ClearLatches(type, transaction, isChanged);
+      }
+      transaction -> AddIntoPageSet(page);
+    } else if (type == DELETE_TRAVERSE) {
+      page -> WLatch();
+      if (!(BPage -> GetMinSize() == BPage -> GetSize()) && !BPage->IsRootPage()) {
+        ClearLatches(type, transaction, isChanged);
+      }
+      transaction -> AddIntoPageSet(page);
+    } else if (type == LOOKUP_TRAVERSE) {
+      page -> RLatch();
+      if (!BPage->IsRootPage()) {
+      ClearLatches(type, transaction, false);
+      }
+      transaction -> AddIntoPageSet(page);
     }
-    transaction->AddIntoPageSet(page);
-  } else if(type == DELETE_TRAVERSE) {
-    page->WLatch();
-    if (!(BPage->GetMinSize() == BPage->GetSize())) {
-       ClearLatches(type, transaction);
+
+  }
+  INDEX_TEMPLATE_ARGUMENTS
+  void BPLUSTREE_TYPE::ClearLatches(TRAVERSE_TYPE type, Transaction * transaction, bool isChanged) {
+    if (transaction == nullptr) {
+      return;
     }
-        transaction->AddIntoPageSet(page);
-  } else if (type == LOOKUP_TRAVERSE) {
-    page->RLatch();
-    ClearLatches(type, transaction);
-    transaction->AddIntoPageSet(page);
+    std::shared_ptr < std::deque < Page * >> queue = transaction -> GetPageSet();
+    while (!queue -> empty()) {
+      Page * page = queue -> front();
+      queue -> pop_front();
+      if (page == nullptr) {
+        if (type == INSERT_TRAVERSE || type == DELETE_TRAVERSE) {
+          rootLatch.WUnlock();
+        } else if (type == LOOKUP_TRAVERSE) {
+          rootLatch.RUnlock();
+        }
+        continue;
+      }
+      if (type == INSERT_TRAVERSE || type == DELETE_TRAVERSE) {
+        page -> WUnlatch();
+        buffer_pool_manager_ -> UnpinPage(page -> GetPageId(), isChanged);
+      } else if (type == LOOKUP_TRAVERSE) {
+        page -> RUnlatch();
+        buffer_pool_manager_ -> UnpinPage(page -> GetPageId(), false);
+      }
+
+    }
+
+    // if (BPage->IsRootPage()) {
+    //   if (type == INSERT_TRAVERSE || type == DELETE_TRAVERSE) {
+    //     LOG_DEBUG("IM UNLOCKING THE ROOT NOW ");
+    //     rootLatch.WUnlock();
+    //     page->WUnlatch();
+    //     buffer_pool_manager_->UnpinPage(page->GetPageId(), isChanged);
+
+    //   } else if (type == LOOKUP_TRAVERSE) {
+    //             LOG_DEBUG("IM UNLOCKING THER READ LOCK ON  ROOT NOW ");
+    //     rootLatch.RUnlock();
+    //     page->RUnlatch();
+    //     buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
+    //   }
+    // } 
   }
 
- }
-  INDEX_TEMPLATE_ARGUMENTS
- void BPLUSTREE_TYPE::ClearLatches(TRAVERSE_TYPE type, Transaction*transaction) {
- if (transaction == nullptr) {
-    return;
-  }
-  std::shared_ptr<std::deque<Page *>> queue = transaction->GetPageSet();
-  while (!queue->empty()) {
-    Page *page = queue->front();
-    queue->pop_front();
-    BPlusTreePage *BPage = reinterpret_cast<BPlusTreePage*>(page);
-    if (BPage->IsRootPage()) {
-      if (type == INSERT_TRAVERSE || type == DELETE_TRAVERSE) {
-        LOG_DEBUG("IM UNLOCKING THE ROOT NOW ");
-        rootLatch.WUnlock();
-        page->WUnlatch();
-        buffer_pool_manager_->UnpinPage(page->GetPageId(), true  );
-        
-      } else if (type == LOOKUP_TRAVERSE) {
-                LOG_DEBUG("IM UNLOCKING THER READ LOCK ON  ROOT NOW ");
-        rootLatch.RUnlock();
-        page->RUnlatch();
-        buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-      }
-    } else {
-      if (type == INSERT_TRAVERSE || type == DELETE_TRAVERSE) {
-          page->WUnlatch();
-           buffer_pool_manager_->UnpinPage(page->GetPageId(), true);
-      } else if (type == LOOKUP_TRAVERSE) {
-          page->RUnlatch();
-           buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-      }
-    }
-  }
-  
- }
-    
   template class BPlusTree < GenericKey < 4 > , RID, GenericComparator < 4 >> ;
   template class BPlusTree < GenericKey < 8 > , RID, GenericComparator < 8 >> ;
   template class BPlusTree < GenericKey < 16 > , RID, GenericComparator < 16 >> ;
