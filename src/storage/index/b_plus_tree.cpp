@@ -42,16 +42,20 @@ namespace bustub {
     rootLatch.RLock();
     transaction->AddIntoPageSet(nullptr);
     }
-    LOG_DEBUG("bringing the key:");
+    // LOG_DEBUG("bringing the key:");
      LeafPage * leafPage = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE, transaction);
      if (leafPage == 0) { 
-      LOG_DEBUG("NO PLACE IN BPM");
+      // LOG_DEBUG("NO PLACE IN BPMBPMBPMBPMBPMBPMBPMBPMBPMBPMBPMBPMBPMBPMBPMBPM");
       ClearLatches(LOOKUP_TRAVERSE,transaction, false);
       return false;
     }
     //BUG
  
      bool isSucess  = leafPage -> GetValue(key, comparator_, result);
+     if (transaction == nullptr) {
+      buffer_pool_manager_->UnpinPage(leafPage->GetPageId(), false);
+     }
+    //  LOG_DEBUG("Response is %d", isSucess);
      ClearLatches(LOOKUP_TRAVERSE,transaction, false);
     return  isSucess;
 
@@ -73,7 +77,8 @@ namespace bustub {
 
       page_id_t currentPageId;
       Page * rawPage = buffer_pool_manager_ -> NewPage( & currentPageId);
-      if (rawPage == nullptr) return 0;
+      assert(rawPage != nullptr);
+ 
       T * rootPage = reinterpret_cast < T * > (rawPage -> GetData());
       root_page_id_ = currentPageId;
       rootPage -> Init(currentPageId, INVALID_PAGE_ID, maxSize);
@@ -108,6 +113,7 @@ namespace bustub {
       LeafPage * returnedLeaf;
       MappingType newPair = std::make_pair(key, value);
       SplitLeafNode(ourLeaf, & returnedLeaf, newPair);
+      assert(returnedLeaf != 0);
       page_id_t parentId = returnedLeaf -> GetParentPageId();
       InternalPage * parentPage;
       if (parentId == INVALID_PAGE_ID) {
@@ -121,13 +127,18 @@ namespace bustub {
         if (rawParentPage == nullptr) return false;
         parentPage = reinterpret_cast < InternalPage * > (rawParentPage -> GetData());
       }
-
+      
       std::pair < KeyType, page_id_t > m = std::make_pair(returnedLeaf -> KeyAt(0), returnedLeaf -> GetPageId());
-      InsertIntoParent(parentPage, m.first, returnedLeaf, ourLeaf -> GetPageId(), transaction);
+        buffer_pool_manager_ -> UnpinPage(returnedLeaf -> GetPageId(), true);
+      InsertIntoParent(parentPage, m.first, returnedLeaf->GetPageId(), ourLeaf -> GetPageId(), transaction);
       ClearLatches(INSERT_TRAVERSE, transaction, true);
        buffer_pool_manager_ -> UnpinPage(parentId, true);
       // buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), true);
-        buffer_pool_manager_ -> UnpinPage(returnedLeaf -> GetPageId(), true);
+       
+
+        if (transaction == nullptr) {
+          buffer_pool_manager_->UnpinPage(ourLeaf->GetPageId(), true);
+        }
        
       return true;
     } else {
@@ -135,6 +146,9 @@ namespace bustub {
       //BUG
       // buffer_pool_manager_ -> UnpinPage(ourLeaf -> GetPageId(), result);
        ClearLatches(INSERT_TRAVERSE, transaction, result);
+        if (transaction == nullptr) {
+          buffer_pool_manager_->UnpinPage(ourLeaf->GetPageId(), true);
+        }
       return result;
     }
   }
@@ -142,7 +156,14 @@ namespace bustub {
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::FindLeaf(KeyType key, page_id_t pageId, TRAVERSE_TYPE traverseType, Transaction * transaction) -> LeafPage * {
     Page * rawPage = buffer_pool_manager_ -> FetchPage(pageId);
-    if (rawPage == nullptr) return 0;
+    // if (traverseType == LOOKUP_TRAVERSE) {
+    //     LOG_DEBUG("Fetching Page Id %d", pageId);
+    // }
+    if (rawPage == nullptr) { 
+        // LOG_DEBUG("L2ET L ERRRTORRRR lets goooooooooo");
+      return 0;
+    }
+    assert(rawPage != nullptr);
     HandleLatches(rawPage, traverseType, transaction, false);
     BPlusTreePage * currentPage = reinterpret_cast < BPlusTreePage * > (rawPage -> GetData());
     if (currentPage -> IsLeafPage()) {
@@ -164,7 +185,10 @@ namespace bustub {
         childPosition = myPage -> ValueAt(myPage -> GetArraySize() - 1);
       }
       //BUG
-      // buffer_pool_manager_ -> UnpinPage(pageId, false);
+      if (transaction == nullptr) {
+      
+      buffer_pool_manager_ -> UnpinPage(pageId, false);
+      }
       return FindLeaf(key, childPosition, traverseType, transaction);
     }
 
@@ -210,7 +234,8 @@ namespace bustub {
     // LeafPage * newLeafPage = reinterpret_cast < LeafPage * > (newPage -> GetData());
     // newLeafPage -> Init(newPageId, oldLeafPage -> GetParentPageId(), oldLeafPage -> GetMaxSize());
     LeafPage * newLeafPage = MakeTwin < LeafPage > (oldLeafPage);
-    if (newLeafPage == nullptr) return;
+    //BUG LMA KANT IF CONDITION
+    assert (newLeafPage != nullptr); 
     newLeafPage -> SetNextPageId(oldLeafPage -> GetNextPageId());
     oldLeafPage -> SetNextPageId(newLeafPage -> GetPageId());
     int median = ceil((temporaryLeafPage.size() / 2.0));
@@ -284,12 +309,12 @@ namespace bustub {
   }
 
   INDEX_TEMPLATE_ARGUMENTS
-  auto BPLUSTREE_TYPE::InsertIntoParent(InternalPage * currentInternal, KeyType & key, BPlusTreePage * currentPage, page_id_t brotherId, Transaction * transaction) -> void {
+  auto BPLUSTREE_TYPE::InsertIntoParent(InternalPage * currentInternal, KeyType & key, page_id_t currentPageId, page_id_t brotherId, Transaction * transaction) -> void {
     if (currentInternal -> IsFull()) {
       InternalPage * brotherPage;
       InternalPage * parentPage;
       page_id_t parentPageId = currentInternal -> GetParentPageId();
-      std::pair < KeyType, page_id_t > returnedPair = InsertInFullInternal(key, currentPage -> GetPageId(), currentInternal, & brotherPage);
+      std::pair < KeyType, page_id_t > returnedPair = InsertInFullInternal(key, currentPageId, currentInternal, & brotherPage);
       if (parentPageId == INVALID_PAGE_ID) {
         //Here i need to create new rgit oot 
         parentPage = BuildRootNode < InternalPage > (internal_max_size_);
@@ -305,13 +330,13 @@ namespace bustub {
       // currentPage -> SetParentPageId(brotherPage -> GetPageId());
       // currentPage->SetParentPageId(returnedPair.second);
 
-      InsertIntoParent(parentPage, returnedPair.first, brotherPage, currentInternal -> GetPageId(), transaction);
-      //   parentPage->Insert(currentInternal->GetPageId(), returnedPair.first, brotherPage->GetPageId(), comparator_);
-
       buffer_pool_manager_ -> UnpinPage(brotherPage -> GetPageId(), true);
+      InsertIntoParent(parentPage, returnedPair.first, brotherPage->GetPageId(), currentInternal -> GetPageId(), transaction);
+      //   parentPage->Insert(currentInternal->GetPageId(), returnedPair.first, brotherPage->GetPageId(), comparator_);
+ 
       buffer_pool_manager_ -> UnpinPage(parentPageId, true);
     } else {
-      currentInternal -> Insert(brotherId, key, currentPage -> GetPageId(), comparator_);
+      currentInternal -> Insert(brotherId, key, currentPageId, comparator_);
     }
   }
 
@@ -876,6 +901,7 @@ namespace bustub {
     auto BPLUSTREE_TYPE::MakeTwin(T * oldNode) -> T * {
       page_id_t newPageId;
       Page * rawNewPage = buffer_pool_manager_ -> NewPage( & newPageId);
+      assert(rawNewPage != nullptr);
       if (rawNewPage == nullptr) return nullptr;
       T * newPage = reinterpret_cast < T * > (rawNewPage -> GetData());
       newPage -> Init(newPageId, oldNode -> GetParentPageId(), oldNode -> GetMaxSize());
