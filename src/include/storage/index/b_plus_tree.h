@@ -83,7 +83,7 @@ class BPlusTree {
 
   void ToString(BPlusTreePage *page, BufferPoolManager *bpm) const;
  
-  auto FindLeaf(KeyType key, page_id_t currentPageId, TRAVERSE_TYPE traverseType, std::vector<page_id_t>&ancestors) -> LeafPage*; 
+  auto FindLeaf(KeyType key, page_id_t currentPageId, TRAVERSE_TYPE traverseType) -> LeafPage*; 
  auto FindLeftMostLeaf(page_id_t currentPageId) -> LeafPage*; 
   auto InsertInFullInternal(const KeyType &k,const page_id_t &Pointer, InternalPage * page, InternalPage**newPage) -> std::pair<KeyType, page_id_t>;
   auto InsertIntoParent(InternalPage *parentNode, KeyType &key, BPlusTreePage *currentPage,page_id_t brotherId, Transaction*trans) -> void;
@@ -98,6 +98,8 @@ class BPlusTree {
   void ReDistributeLeaf(LeafPage*src, LeafPage * destination, bool pushBack);
   void Merge(LeafPage*src, LeafPage * destination) ;
     void MergeInternalPage(InternalPage * src, InternalPage * destination);
+    void ClearLatches(TRAVERSE_TYPE type, Transaction*transaction);
+    void HandleLatches(Page *page, TRAVERSE_TYPE type, Transaction*transaction);
   // member variable
   std::string index_name_;
   page_id_t root_page_id_;
