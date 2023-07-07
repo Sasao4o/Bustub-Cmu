@@ -363,6 +363,7 @@ namespace bustub {
     }
     //If The Root is the Leaf
     if (foundLeaf -> IsRootPage() && foundLeaf -> GetSize() >= 1) {
+ 
       foundLeaf -> Remove(key, comparator_);
       if (foundLeaf -> IsRootPage() && foundLeaf -> GetSize() == 0) {
         root_page_id_ = INVALID_PAGE_ID;
@@ -376,7 +377,7 @@ namespace bustub {
     if (foundLeaf -> IsMin()) {
       //Here We Go
       HandleLeafDelete(foundLeaf, key, transaction);
-
+      ClearLatches(DELETE_TRAVERSE, transaction, true);
     } else {
       foundLeaf -> Remove(key, comparator_);
       ClearLatches(DELETE_TRAVERSE, transaction, true);
