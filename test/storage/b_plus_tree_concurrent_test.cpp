@@ -332,5 +332,72 @@ TEST(BPlusTreeConcurrentTest, MixTest) {
   remove("test.db");
   remove("test.log");
 }
+TEST(BPlusTreeTests, ScaleTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  DiskManager *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
+  GenericKey<8> index_key;
+  RID rid;
+  // create transaction
+  Transaction *transaction = new Transaction(0);
+
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+  const int64_t key_size = 5000;
+  const int64_t diff = 1000;
+  for (int64_t key = 1; key <= key_size; key++) {
+    int64_t value = key & 0xFFFFFFFF;
+    rid.Set(static_cast<int32_t>(key >> 32), value);
+    index_key.SetFromInteger(key);
+    tree.Insert(index_key, rid, transaction);
+  }
+
+  std::vector<RID> rids;
+  for (int64_t key = 1; key <= key_size; key++) {
+    rids.clear();
+    index_key.SetFromInteger(key);
+    tree.GetValue(index_key, &rids);
+    EXPECT_EQ(rids.size(), 1);
+
+    int64_t value = key & 0xFFFFFFFF;
+    EXPECT_EQ(rids[0].GetSlotNum(), value);
+  }
+
+  for (int64_t key = 1; key <= diff; key++) {
+    index_key.SetFromInteger(key);
+    tree.Remove(index_key, transaction);
+  }
+
+  // int64_t start_key = key_size - diff + 1;
+  // int64_t current_key = start_key;
+  // int64_t size = 0;
+  // index_key.SetFromInteger(start_key);
+  // for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
+  //   auto location = (*iterator).second;
+  //   EXPECT_EQ(location.GetPageId(), 0);
+  //   EXPECT_EQ(location.GetSlotNum(), current_key);
+  //   current_key = current_key + 1;
+  //   size += 1;
+  // }
+
+  // EXPECT_EQ(current_key, key_size + 1);
+  // EXPECT_EQ(size, diff);
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+ 
+  delete transaction;
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
 
 }  // namespace bustub
+

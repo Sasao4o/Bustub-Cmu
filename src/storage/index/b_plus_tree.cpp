@@ -377,12 +377,12 @@ namespace bustub {
     if (foundLeaf -> IsMin()) {
       //Here We Go
       HandleLeafDelete(foundLeaf, key, transaction);
-      ClearLatches(DELETE_TRAVERSE, transaction, true);
     } else {
       foundLeaf -> Remove(key, comparator_);
-      ClearLatches(DELETE_TRAVERSE, transaction, true);
     }
 
+    CleanupDeletedPages(transaction);
+    ClearLatches(DELETE_TRAVERSE, transaction, true);
   }
   INDEX_TEMPLATE_ARGUMENTS
   void BPLUSTREE_TYPE::HandleLeafDelete(BPlusTreePage * currentPage,
@@ -451,11 +451,15 @@ namespace bustub {
 
           sucess = true;
         }
+      if (leftBrotherId != INVALID_PAGE_ID)  buffer_pool_manager_ ->UnpinPage(leftBrotherId, true);
+      if (rightBrotherId != INVALID_PAGE_ID) buffer_pool_manager_ ->UnpinPage(rightBrotherId, true);
+      buffer_pool_manager_ -> UnpinPage(currentPage -> GetParentPageId(), true);
       }
+ 
     }
 
-    // buffer_pool_manager_->UnpinPage(leftBrotherPage->GetPageId(), true);
-    buffer_pool_manager_ -> UnpinPage(currentPageId, true);
+   
+ 
   }
 
   INDEX_TEMPLATE_ARGUMENTS
@@ -472,7 +476,7 @@ namespace bustub {
         reinterpret_cast < BPlusTreePage * > (newRootPage) -> SetParentPageId(INVALID_PAGE_ID);
         root_page_id_ = newRootId;
         UpdateRootPageId(0);
-        buffer_pool_manager_ -> UnpinPage(currentPage -> GetPageId(), true);
+        buffer_pool_manager_ -> UnpinPage(newRootId, true);
       }
       return;
     }
@@ -534,7 +538,7 @@ namespace bustub {
           BmovedPage -> SetParentPageId(currentInternalPage -> GetPageId());
           sucess = true;
           buffer_pool_manager_ -> UnpinPage(movedPairs.second, true);
-          buffer_pool_manager_ -> UnpinPage(leftBrotherId, true);
+          buffer_pool_manager_ -> UnpinPage(rightBrotherId, true);
         }
       }
       if (!sucess) {
@@ -549,11 +553,12 @@ namespace bustub {
           Page * child = buffer_pool_manager_ -> FetchPage(firstPageId);
           BPlusTreePage * page = reinterpret_cast < BPlusTreePage * > (child);
           page -> SetParentPageId(leftBrotherPage -> GetPageId());
-          buffer_pool_manager_ -> UnpinPage(child -> GetPageId(), true);
+           
           MergeInternalPage(currentInternalPage, leftBrotherPage);
           transaction -> AddIntoDeletedPageSet(currentPageId);
           // parentPage->Remove(currentPageId);
           HandleInternalDelete(parentPage, currentPageId, transaction);
+          buffer_pool_manager_ -> UnpinPage(child -> GetPageId(), true);
           sucess = true;
         } else if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
           currentInternalPage -> Remove(value);
@@ -563,16 +568,19 @@ namespace bustub {
           Page * child = buffer_pool_manager_ -> FetchPage(firstPageId);
           BPlusTreePage * page = reinterpret_cast < BPlusTreePage * > (child);
           page -> SetParentPageId(currentInternalPage -> GetPageId());
-          buffer_pool_manager_ -> UnpinPage(child -> GetPageId(), true);
+         
           MergeInternalPage(rightBrotherPage, currentInternalPage);
           transaction -> AddIntoDeletedPageSet(rightBrotherId);
           // parentPage->Remove(currentPageId);
           HandleInternalDelete(parentPage, rightBrotherId, transaction);
+          buffer_pool_manager_ -> UnpinPage(child -> GetPageId(), true);
           sucess = true;
         }
+      if (leftBrotherId != INVALID_PAGE_ID)  buffer_pool_manager_ ->UnpinPage(leftBrotherId, true);
+      if (rightBrotherId != INVALID_PAGE_ID) buffer_pool_manager_ ->UnpinPage(rightBrotherId, true);
       }
 
-      buffer_pool_manager_ -> UnpinPage(currentPageId, true);
+      buffer_pool_manager_ -> UnpinPage(currentPage -> GetParentPageId(), true);
     }
   }
   INDEX_TEMPLATE_ARGUMENTS
@@ -976,6 +984,14 @@ namespace bustub {
     //   }
     // } 
   }
+    INDEX_TEMPLATE_ARGUMENTS
+    void BPLUSTREE_TYPE::CleanupDeletedPages(Transaction *transaction) {
+      const auto deleted_pages = transaction->GetDeletedPageSet();
+      for (const auto &page_id : *deleted_pages) {
+        buffer_pool_manager_->DeletePage(page_id);
+      }
+      deleted_pages->clear();
+    }
 
   template class BPlusTree < GenericKey < 4 > , RID, GenericComparator < 4 >> ;
   template class BPlusTree < GenericKey < 8 > , RID, GenericComparator < 8 >> ;

@@ -100,6 +100,7 @@ class BPlusTree {
     void MergeInternalPage(InternalPage * src, InternalPage * destination);
     void ClearLatches(TRAVERSE_TYPE type, Transaction*transaction, bool isChanged);
     void HandleLatches(Page *page, TRAVERSE_TYPE type, Transaction*transaction, bool isChanged);
+    void CleanupDeletedPages(Transaction *transaction);
   // member variable
   std::string index_name_;
   page_id_t root_page_id_;
