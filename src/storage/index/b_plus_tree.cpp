@@ -100,12 +100,16 @@ namespace bustub {
       bool result = rootPage -> Insert(key, value, comparator_);
       buffer_pool_manager_->UnpinPage(rootPage->GetPageId(), true);
       ClearLatches(INSERT_TRAVERSE, transaction, true);
+      
       return result;
     }
  
     LeafPage * ourLeaf = FindLeaf(key, root_page_id_, INSERT_TRAVERSE, transaction);
     if (ourLeaf -> KeyExist(key, comparator_)) {
       ClearLatches(INSERT_TRAVERSE, transaction, false);
+        if (transaction == nullptr) {
+          buffer_pool_manager_->UnpinPage(ourLeaf->GetPageId(), true);
+        }
       return false;
     }
     if (ourLeaf -> IsFull()) {
@@ -155,14 +159,12 @@ namespace bustub {
 
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::FindLeaf(KeyType key, page_id_t pageId, TRAVERSE_TYPE traverseType, Transaction * transaction) -> LeafPage * {
+    assert(pageId != INVALID_PAGE_ID);
     Page * rawPage = buffer_pool_manager_ -> FetchPage(pageId);
     // if (traverseType == LOOKUP_TRAVERSE) {
     //     LOG_DEBUG("Fetching Page Id %d", pageId);
     // }
-    if (rawPage == nullptr) { 
-        // LOG_DEBUG("L2ET L ERRRTORRRR lets goooooooooo");
-      return 0;
-    }
+   
     assert(rawPage != nullptr);
     HandleLatches(rawPage, traverseType, transaction, false);
     BPlusTreePage * currentPage = reinterpret_cast < BPlusTreePage * > (rawPage -> GetData());
@@ -356,8 +358,13 @@ namespace bustub {
       rootLatch.WLock();
       transaction->AddIntoPageSet(nullptr);
     }
+     if (root_page_id_ == INVALID_PAGE_ID) {
+      rootLatch.WUnlock();
+      return;}
     LeafPage * foundLeaf = FindLeaf(key, root_page_id_, DELETE_TRAVERSE, transaction);
-    if (!foundLeaf -> KeyExist(key, comparator_)) {
+
+    if (!foundLeaf -> KeyExist(key, comparator_) || foundLeaf->GetSize() == 0) {
+       
       ClearLatches(DELETE_TRAVERSE, transaction, false);
       return;
     }
@@ -368,7 +375,8 @@ namespace bustub {
       if (foundLeaf -> IsRootPage() && foundLeaf -> GetSize() == 0) {
         root_page_id_ = INVALID_PAGE_ID;
         UpdateRootPageId(0);
-        transaction -> AddIntoDeletedPageSet(root_page_id_);
+         transaction -> AddIntoDeletedPageSet(root_page_id_);
+         CleanupDeletedPages(transaction);
          ClearLatches(DELETE_TRAVERSE, transaction, true);
         return;
       }
@@ -625,7 +633,11 @@ namespace bustub {
    */
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
+    //THIS IS NOT MULTITHREADED SAFE!!
     //I will create iterator that has in its current state the most left leaf so i wanna give him this id !
+    rootLatch.RLock();
+    if (root_page_id_ == INVALID_PAGE_ID) return INDEXITERATOR_TYPE(INVALID_PAGE_ID, buffer_pool_manager_, 0);
+    rootLatch.RUnlock();
     LeafPage * leftMostLeaf = FindLeftMostLeaf(root_page_id_);
     buffer_pool_manager_ -> UnpinPage(leftMostLeaf -> GetPageId(), false);
     return INDEXITERATOR_TYPE(leftMostLeaf -> GetPageId(), buffer_pool_manager_, 0);
@@ -638,7 +650,9 @@ namespace bustub {
    */
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::Begin(const KeyType & key) -> INDEXITERATOR_TYPE {
-
+    rootLatch.RLock();
+    if (root_page_id_ == INVALID_PAGE_ID) return INDEXITERATOR_TYPE(INVALID_PAGE_ID, buffer_pool_manager_, 0);
+    rootLatch.RUnlock();
     LeafPage * currentLeaf = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE);
     int index = currentLeaf -> KeyIndex(key, comparator_);
     return INDEXITERATOR_TYPE(currentLeaf -> GetPageId(), buffer_pool_manager_, index);
@@ -923,7 +937,7 @@ namespace bustub {
     BPlusTreePage * BPage = reinterpret_cast < BPlusTreePage * > (page);
     if (type == INSERT_TRAVERSE) {
       page -> WLatch();
-      if (!(BPage -> GetMaxSize() == BPage -> GetSize()) && !BPage->IsRootPage()) {
+      if ((BPage -> GetMaxSize() > BPage -> GetSize() + 1) && !BPage->IsRootPage()) {
         ClearLatches(type, transaction, isChanged);
       }
       transaction -> AddIntoPageSet(page);

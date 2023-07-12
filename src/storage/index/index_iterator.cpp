@@ -20,7 +20,7 @@ INDEXITERATOR_TYPE::IndexIterator(int pageId, BufferPoolManager *buffer_pool_man
 
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::~IndexIterator() {
-    buffer_pool_manager_->UnpinPage(currentPageId,false);
+    // buffer_pool_manager_->UnpinPage(currentPageId,false);
 };  // NOLINT
 
 INDEX_TEMPLATE_ARGUMENTS
