@@ -77,7 +77,7 @@ namespace bustub {
 
       page_id_t currentPageId;
       Page * rawPage = buffer_pool_manager_ -> NewPage( & currentPageId);
-      assert(rawPage != nullptr);
+      //assert(rawPage != nullptr);
  
       T * rootPage = reinterpret_cast < T * > (rawPage -> GetData());
       root_page_id_ = currentPageId;
@@ -112,12 +112,12 @@ namespace bustub {
         }
       return false;
     }
-    if (ourLeaf -> IsFull()) {
+    if (ourLeaf->GetMaxSize() == ourLeaf->GetSize() + 1) {
       //We Need to Split
       LeafPage * returnedLeaf;
       MappingType newPair = std::make_pair(key, value);
       SplitLeafNode(ourLeaf, & returnedLeaf, newPair);
-      assert(returnedLeaf != 0);
+      //assert(returnedLeaf != 0);
       page_id_t parentId = returnedLeaf -> GetParentPageId();
       InternalPage * parentPage;
       if (parentId == INVALID_PAGE_ID) {
@@ -159,13 +159,13 @@ namespace bustub {
 
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::FindLeaf(KeyType key, page_id_t pageId, TRAVERSE_TYPE traverseType, Transaction * transaction) -> LeafPage * {
-    assert(pageId != INVALID_PAGE_ID);
+    //assert(pageId != INVALID_PAGE_ID);
     Page * rawPage = buffer_pool_manager_ -> FetchPage(pageId);
     // if (traverseType == LOOKUP_TRAVERSE) {
     //     LOG_DEBUG("Fetching Page Id %d", pageId);
     // }
    
-    assert(rawPage != nullptr);
+    //assert(rawPage != nullptr);
     HandleLatches(rawPage, traverseType, transaction, false);
     BPlusTreePage * currentPage = reinterpret_cast < BPlusTreePage * > (rawPage -> GetData());
     if (currentPage -> IsLeafPage()) {
@@ -237,7 +237,7 @@ namespace bustub {
     // newLeafPage -> Init(newPageId, oldLeafPage -> GetParentPageId(), oldLeafPage -> GetMaxSize());
     LeafPage * newLeafPage = MakeTwin < LeafPage > (oldLeafPage);
     //BUG LMA KANT IF CONDITION
-    assert (newLeafPage != nullptr); 
+    //assert (newLeafPage != nullptr); 
     newLeafPage -> SetNextPageId(oldLeafPage -> GetNextPageId());
     oldLeafPage -> SetNextPageId(newLeafPage -> GetPageId());
     int median = ceil((temporaryLeafPage.size() / 2.0));
@@ -359,11 +359,11 @@ namespace bustub {
       transaction->AddIntoPageSet(nullptr);
     }
      if (root_page_id_ == INVALID_PAGE_ID) {
-      rootLatch.WUnlock();
+      ClearLatches(DELETE_TRAVERSE, transaction, false);
       return;}
     LeafPage * foundLeaf = FindLeaf(key, root_page_id_, DELETE_TRAVERSE, transaction);
 
-    if (!foundLeaf -> KeyExist(key, comparator_) || foundLeaf->GetSize() == 0) {
+    if (!foundLeaf -> KeyExist(key, comparator_)) {
        
       ClearLatches(DELETE_TRAVERSE, transaction, false);
       return;
@@ -924,7 +924,7 @@ namespace bustub {
     auto BPLUSTREE_TYPE::MakeTwin(T * oldNode) -> T * {
       page_id_t newPageId;
       Page * rawNewPage = buffer_pool_manager_ -> NewPage( & newPageId);
-      assert(rawNewPage != nullptr);
+     //assert(rawNewPage != nullptr);
       if (rawNewPage == nullptr) return nullptr;
       T * newPage = reinterpret_cast < T * > (rawNewPage -> GetData());
       newPage -> Init(newPageId, oldNode -> GetParentPageId(), oldNode -> GetMaxSize());
@@ -937,7 +937,8 @@ namespace bustub {
     BPlusTreePage * BPage = reinterpret_cast < BPlusTreePage * > (page);
     if (type == INSERT_TRAVERSE) {
       page -> WLatch();
-      if ((BPage -> GetMaxSize() > BPage -> GetSize() + 1) && !BPage->IsRootPage()) {
+           if (BPage->GetSize() < BPage->GetMaxSize() - 1 ||
+            (!BPage->IsLeafPage() && BPage->GetSize() == BPage->GetMaxSize() - 1)) {
         ClearLatches(type, transaction, isChanged);
       }
       transaction -> AddIntoPageSet(page);
