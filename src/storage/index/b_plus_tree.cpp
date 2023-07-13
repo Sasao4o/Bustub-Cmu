@@ -112,7 +112,7 @@ namespace bustub {
         }
       return false;
     }
-    if (ourLeaf->GetMaxSize() == ourLeaf->GetSize() + 1) {
+    if (ourLeaf->IsFull()) {
       //We Need to Split
       LeafPage * returnedLeaf;
       MappingType newPair = std::make_pair(key, value);
@@ -937,8 +937,7 @@ namespace bustub {
     BPlusTreePage * BPage = reinterpret_cast < BPlusTreePage * > (page);
     if (type == INSERT_TRAVERSE) {
       page -> WLatch();
-           if (BPage->GetSize() < BPage->GetMaxSize() - 1 ||
-            (!BPage->IsLeafPage() && BPage->GetSize() == BPage->GetMaxSize() - 1)) {
+           if (BPage->GetSize() + 1 < BPage->GetMaxSize()) {
         ClearLatches(type, transaction, isChanged);
       }
       transaction -> AddIntoPageSet(page);
