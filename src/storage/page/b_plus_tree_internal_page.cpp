@@ -103,7 +103,7 @@ bool B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const ValueType &leftPointer, const 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertAndShift(const KeyType &k,const ValueType &Pointer,KeyComparator &comp) -> bool {
       //This Function assume left pointer is fixed so if we split full node our original pointer alwayss points to the left (ALWAYSSS!!!)
-  if (this->GetMaxSize() == this->GetSize()) {
+  if (this->GetMaxSize() == this->GetSize() ) {
           return false;
         }
         int i = 1;

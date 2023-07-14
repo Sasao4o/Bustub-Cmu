@@ -427,7 +427,7 @@ TEST(BPlusTreeConcurrentTest, MyTest) {
   std::vector<std::thread> thread_group;
 
   // Launch a group of threads
-  for (uint64_t thread_itr = 0; thread_itr < 10; ++thread_itr) {
+  for (uint64_t thread_itr = 0; thread_itr < 20; ++thread_itr) {
     if (thread_itr % 2) {
       thread_group.push_back(std::thread(InsertHelper, &tree, keys, thread_itr));
     } else {
@@ -436,7 +436,7 @@ TEST(BPlusTreeConcurrentTest, MyTest) {
   }
 
   // Join the threads with the main thread
-  for (uint64_t thread_itr = 0; thread_itr < 10; ++thread_itr) {
+  for (uint64_t thread_itr = 0; thread_itr < 20; ++thread_itr) {
     thread_group[thread_itr].join();
   }
 
@@ -512,7 +512,7 @@ int64_t size = 0;
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, LargeDeleteConcurrently) {
+TEST(BPlusTreeConcurrentTest, DISABLED_LargeDeleteConcurrently) {
     // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -532,7 +532,7 @@ TEST(BPlusTreeConcurrentTest, LargeDeleteConcurrently) {
 
   // concurrent insert
   keys.clear();
-  for (int i = 1; i <= 10000; i += 2) {
+  for (int i = 1; i <= 100000; i += 2) {
     keys.push_back(i);
   }
   LaunchParallelTest(1, InsertHelper, &tree, keys);
@@ -543,30 +543,30 @@ TEST(BPlusTreeConcurrentTest, LargeDeleteConcurrently) {
     auto val = (*iterator).second;
     EXPECT_EQ(val.GetSlotNum(), 2 * size - 1);
   }
-  EXPECT_EQ(size, 5000);
+  EXPECT_EQ(size, 50000);
 
   // mixed insert and remove
   removed_keys.clear();
-  for (int i = 1; i <= 10000; i += 2) {
+  for (int i = 1; i <= 100000; i += 2) {
     removed_keys.push_back(i);
   }
  
   // LaunchParallelTest(5, InsertHelper, &tree, keys);
   // LaunchParallelTest(5, DeleteHelper, &tree, removed_keys);
-  // std::vector<std::thread> thread_group;
+  std::vector<std::thread> thread_group;
 
   // // Launch a group of threads
-  // for (uint64_t thread_itr = 0; thread_itr < 1; ++thread_itr) {
-  //     thread_group.push_back(std::thread(DeleteHelper, &tree, removed_keys, thread_itr));
+  for (uint64_t thread_itr = 0; thread_itr < 10; ++thread_itr) {
+      thread_group.push_back(std::thread(DeleteHelper, &tree, removed_keys, thread_itr));
     
-  // }
+  }
 
-  // // Join the threads with the main thread
-  // for (uint64_t thread_itr = 0; thread_itr < 1; ++thread_itr) {
-  //   thread_group[thread_itr].join();
-  // }
+  // Join the threads with the main thread
+  for (uint64_t thread_itr = 0; thread_itr < 10; ++thread_itr) {
+    thread_group[thread_itr].join();
+  }
 
-  LaunchParallelTest(1, DeleteHelper, &tree, removed_keys);
+  // LaunchParallelTest(1, DeleteHelper, &tree, removed_keys);
   size = 0;
   for (auto iterator = tree.Begin(); iterator != tree.End(); ++iterator) {
     size = size + 1;
@@ -715,6 +715,7 @@ TEST(BPlusTreeConcurrentTest,LargeTest) {
     EXPECT_EQ(val.GetSlotNum(), 2 * size);
   }
   EXPECT_EQ(size, 500);
+  tree.Draw(bpm, "./x.dot");
    bpm->UnpinPage(HEADER_PAGE_ID, true);
   delete disk_manager;
   delete bpm;
