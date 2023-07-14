@@ -938,7 +938,7 @@ namespace bustub {
     BPlusTreePage * BPage = reinterpret_cast < BPlusTreePage * > (page);
     if (type == INSERT_TRAVERSE) {
       page -> WLatch();
-          if ( ((BPage->IsLeafPage() && BPage -> GetMaxSize() > BPage -> GetSize()) || (BPage->IsInternalPage() && BPage -> GetMaxSize() > BPage -> GetSize() + 1)) && !BPage->IsRootPage()) {
+          if (BPage -> GetMaxSize() > BPage -> GetSize() + 1 && !BPage->IsRootPage()) {
         ClearLatches(type, transaction, isChanged);
       }
       transaction -> AddIntoPageSet(page);
