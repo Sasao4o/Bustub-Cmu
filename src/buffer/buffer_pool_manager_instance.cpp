@@ -191,12 +191,12 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   return true;
 }
 
-int BufferPoolManagerInstance::GetFreeListSize() {
-  return   free_list_.size();
-}
-int BufferPoolManagerInstance::GetFreeEvictableSize() {
-  return  replacer_->Size();
-}
+// int BufferPoolManagerInstance::GetFreeListSize() {
+//   return   free_list_.size();
+// }
+// int BufferPoolManagerInstance::GetFreeEvictableSize() {
+//   return  replacer_->Size();
+// }
 auto BufferPoolManagerInstance::AllocatePage() -> page_id_t { return next_page_id_++; }
 
 }  // namespace bustub

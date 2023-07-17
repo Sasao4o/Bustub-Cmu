@@ -86,8 +86,7 @@ class BufferPoolManager {
 
   /** @return size of the buffer pool */
   virtual auto GetPoolSize() -> size_t = 0;
-   virtual int GetFreeListSize() = 0;
-     virtual int GetFreeEvictableSize() = 0;
+ 
  protected:
   /**
    * Grading function. Do not modify!
