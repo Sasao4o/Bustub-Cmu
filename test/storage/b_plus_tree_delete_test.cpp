@@ -157,6 +157,7 @@ TEST(BPlusTreeTests, DeleteTest2) {
   EXPECT_EQ(size, 1);
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
+ 
   delete transaction;
   delete disk_manager;
   delete bpm;

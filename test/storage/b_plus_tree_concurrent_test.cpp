@@ -384,10 +384,10 @@ TEST(BPlusTreeConcurrentTest, MyTest) {
   GenericComparator<8> comparator(key_schema.get());
 
   auto *disk_manager = new DiskManager("test.db");
-  BufferPoolManager *bpm = new BufferPoolManagerInstance(500, disk_manager);
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(200, disk_manager);
   // create b+ tree
   BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 3, 5);
-
+ 
   // create and fetch header_page
   page_id_t page_id;
   auto header_page = bpm->NewPage(&page_id);
@@ -447,7 +447,7 @@ TEST(BPlusTreeConcurrentTest, MyTest) {
     EXPECT_EQ(val.GetSlotNum(), 2 * size);
   }
   EXPECT_EQ(size, 5000);
-
+ 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
   delete disk_manager;
   delete bpm;
@@ -460,7 +460,7 @@ TEST(BPlusTreeConcurrentTest,  LargeInsertConcurrently) {
   GenericComparator<8> comparator(key_schema.get());
 
   auto *disk_manager = new DiskManager("test.db");
-  BufferPoolManager *bpm = new BufferPoolManagerInstance(500, disk_manager);
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
   // create b+ tree
   BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 3, 5);
 
@@ -504,8 +504,9 @@ int64_t size = 0;
     EXPECT_EQ(val.GetSlotNum(), 2 * size);
   }
   EXPECT_EQ(size, 5000);
-
+ 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
+ 
   delete disk_manager;
   delete bpm;
   remove("test.db");
@@ -544,7 +545,8 @@ TEST(BPlusTreeConcurrentTest, LargeDeleteConcurrently) {
     EXPECT_EQ(val.GetSlotNum(), 2 * size - 1);
   }
   EXPECT_EQ(size, 5000);
-
+       EXPECT_EQ(bpm->GetFreeEvictableSize() + bpm->GetFreeListSize() + 1, 50);
+ 
   // mixed insert and remove
   removed_keys.clear();
   for (int i = 1; i <= 10000; i += 2) {
@@ -575,6 +577,8 @@ TEST(BPlusTreeConcurrentTest, LargeDeleteConcurrently) {
   EXPECT_EQ(size, 0);
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
+       EXPECT_EQ(bpm->GetFreeEvictableSize(), 50);
+  EXPECT_EQ(bpm->GetFreeListSize(), 50);
   delete disk_manager;
   delete bpm;
   remove("test.db");

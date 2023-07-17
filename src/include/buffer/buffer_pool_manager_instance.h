@@ -51,7 +51,8 @@ class BufferPoolManagerInstance : public BufferPoolManager {
 
   /** @brief Return the pointer to all the pages in the buffer pool. */
   auto GetPages() -> Page * { return pages_; }
-
+  int GetFreeListSize() override; 
+ int  GetFreeEvictableSize() override;
  protected:
   /**
    * TODO(P1): Add implementation

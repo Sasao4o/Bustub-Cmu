@@ -329,6 +329,7 @@ TEST(BPlusTreeTests, InsertTest1) {
 
   bpm->UnpinPage(root_page_id, false);
   bpm->UnpinPage(HEADER_PAGE_ID, true);
+ 
   delete transaction;
   delete disk_manager;
   delete bpm;
@@ -524,6 +525,8 @@ TEST(BPlusTreeTests, HardTest) {
   EXPECT_EQ(size, keys.size());
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
+  EXPECT_EQ(bpm->GetFreeEvictableSize(), 50);
+  EXPECT_EQ(bpm->GetFreeListSize(), 50);
   delete transaction;
   delete disk_manager;
   delete bpm;

@@ -366,6 +366,7 @@ namespace bustub {
     if (!foundLeaf -> KeyExist(key, comparator_)) {
        
       ClearLatches(DELETE_TRAVERSE, transaction, false);
+ 
       return;
     }
     //If The Root is the Leaf
@@ -376,10 +377,10 @@ namespace bustub {
         root_page_id_ = INVALID_PAGE_ID;
         UpdateRootPageId(0);
          transaction -> AddIntoDeletedPageSet(root_page_id_);
+      }
          CleanupDeletedPages(transaction);
          ClearLatches(DELETE_TRAVERSE, transaction, true);
-        return;
-      }
+            return;
     }
 
     if (foundLeaf -> IsMin()) {
@@ -391,6 +392,7 @@ namespace bustub {
 
     CleanupDeletedPages(transaction);
     ClearLatches(DELETE_TRAVERSE, transaction, true);
+    LOG_DEBUG("Free size is %d", buffer_pool_manager_->GetFreeEvictableSize() + buffer_pool_manager_->GetFreeListSize());
   }
   INDEX_TEMPLATE_ARGUMENTS
   void BPLUSTREE_TYPE::HandleLeafDelete(BPlusTreePage * currentPage,
@@ -419,7 +421,7 @@ namespace bustub {
           KeyType myKey = currentLeafPage -> KeyAt(0);
           parentPage -> ChangeKeyOfValue(currentPageId, myKey);
           sucess = true;
-          buffer_pool_manager_ -> UnpinPage(leftBrotherPage -> GetPageId(), true);
+  
           buffer_pool_manager_ -> UnpinPage(parentPage -> GetPageId(), true);
         }
       }
@@ -435,7 +437,7 @@ namespace bustub {
           KeyType myKey = rightBrotherPage -> KeyAt(0);
           parentPage -> ChangeKeyOfValue(rightBrotherId, myKey);
           sucess = true;
-          buffer_pool_manager_ -> UnpinPage(rightBrotherPage -> GetPageId(), true);
+        
           buffer_pool_manager_ -> UnpinPage(parentPage -> GetPageId(), true);
         }
       }
@@ -459,11 +461,11 @@ namespace bustub {
 
           sucess = true;
         }
-      if (leftBrotherId != INVALID_PAGE_ID)  buffer_pool_manager_ ->UnpinPage(leftBrotherId, true);
-      if (rightBrotherId != INVALID_PAGE_ID) buffer_pool_manager_ ->UnpinPage(rightBrotherId, true);
+  
       buffer_pool_manager_ -> UnpinPage(currentPage -> GetParentPageId(), true);
       }
- 
+      if (leftBrotherId != INVALID_PAGE_ID)  buffer_pool_manager_ ->UnpinPage(leftBrotherId, true);
+      if (rightBrotherId != INVALID_PAGE_ID) buffer_pool_manager_ ->UnpinPage(rightBrotherId, true);
     }
 
    
@@ -524,7 +526,7 @@ namespace bustub {
           BmovedPage -> SetParentPageId(currentInternalPage -> GetPageId());
           sucess = true;
           buffer_pool_manager_ -> UnpinPage(movedPairs.second, true);
-          buffer_pool_manager_ -> UnpinPage(leftBrotherId, true);
+ 
         }
       }
       if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
@@ -546,7 +548,7 @@ namespace bustub {
           BmovedPage -> SetParentPageId(currentInternalPage -> GetPageId());
           sucess = true;
           buffer_pool_manager_ -> UnpinPage(movedPairs.second, true);
-          buffer_pool_manager_ -> UnpinPage(rightBrotherId, true);
+         
         }
       }
       if (!sucess) {
@@ -584,10 +586,10 @@ namespace bustub {
           buffer_pool_manager_ -> UnpinPage(child -> GetPageId(), true);
           sucess = true;
         }
-      if (leftBrotherId != INVALID_PAGE_ID)  buffer_pool_manager_ ->UnpinPage(leftBrotherId, true);
-      if (rightBrotherId != INVALID_PAGE_ID) buffer_pool_manager_ ->UnpinPage(rightBrotherId, true);
+ 
       }
-
+          if (leftBrotherId != INVALID_PAGE_ID)  buffer_pool_manager_ ->UnpinPage(leftBrotherId, true);
+      if (rightBrotherId != INVALID_PAGE_ID) buffer_pool_manager_ ->UnpinPage(rightBrotherId, true);
       buffer_pool_manager_ -> UnpinPage(currentPage -> GetParentPageId(), true);
     }
   }
@@ -943,7 +945,7 @@ namespace bustub {
       transaction -> AddIntoPageSet(page);
     } else if (type == DELETE_TRAVERSE) {
       page -> WLatch();
-      if (!(BPage -> GetMinSize() == BPage -> GetSize()) && !BPage->IsRootPage()) {
+      if ((BPage -> GetMinSize() < BPage -> GetSize() - 1) && !BPage->IsRootPage()) {
         ClearLatches(type, transaction, isChanged);
       }
       transaction -> AddIntoPageSet(page);
