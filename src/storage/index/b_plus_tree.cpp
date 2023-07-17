@@ -128,7 +128,7 @@ namespace bustub {
         returnedLeaf -> SetParentPageId(parentId);
       } else {
         Page * rawParentPage = buffer_pool_manager_ -> FetchPage(parentId);
-        if (rawParentPage == nullptr) return false;
+        if (rawParentPage == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page1");
         parentPage = reinterpret_cast < InternalPage * > (rawParentPage -> GetData());
       }
       
@@ -324,7 +324,7 @@ namespace bustub {
         parentPageId = parentPage -> GetPageId();
       } else {
         Page * rawParentPage = buffer_pool_manager_ -> FetchPage(parentPageId);
-        if (rawParentPage == nullptr) return;
+        if (rawParentPage == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page2");;
         parentPage = reinterpret_cast < InternalPage * > (rawParentPage -> GetData());
       }
       currentInternal -> SetParentPageId(parentPageId);
@@ -399,7 +399,7 @@ namespace bustub {
     bool sucess = false;
     if (currentPage -> IsLeafPage()) {
       Page * rawParentPage = buffer_pool_manager_ -> FetchPage(currentPage -> GetParentPageId());
-      if (rawParentPage == nullptr) return;
+      if (rawParentPage == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page4");;
       LeafPage * currentLeafPage = reinterpret_cast < LeafPage * > (currentPage);
       InternalPage * parentPage = reinterpret_cast < InternalPage * > (rawParentPage -> GetData());
       page_id_t leftBrotherId = parentPage -> GetLeftSibling(currentPageId);
@@ -410,7 +410,7 @@ namespace bustub {
       LeafPage * rightBrotherPage;
       if (leftBrotherId != INVALID_PAGE_ID) {
         Page * rawLeftBrother = buffer_pool_manager_ -> FetchPage(leftBrotherId);
-        if (rawLeftBrother == nullptr) return;
+        if (rawLeftBrother == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page5");;
         leftBrotherPage = reinterpret_cast < LeafPage * > (rawLeftBrother -> GetData());
         if (!leftBrotherPage -> IsMin()) {
           //He will give me
@@ -426,7 +426,7 @@ namespace bustub {
       if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
         //if the previous step failed try with the right brother
         Page * rawRightBrother = buffer_pool_manager_ -> FetchPage(rightBrotherId);
-        if (rawRightBrother == nullptr) return;
+        if (rawRightBrother == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page");;
         rightBrotherPage = reinterpret_cast < LeafPage * > (rawRightBrother -> GetData());
         if (!rightBrotherPage -> IsMin()) {
           //He will give me
@@ -499,7 +499,7 @@ namespace bustub {
       page_id_t currentPageId = currentPage -> GetPageId();
       bool sucess = false;
       Page * rawParentPage = buffer_pool_manager_ -> FetchPage(currentPage -> GetParentPageId());
-      if (rawParentPage == nullptr) return;
+      if (rawParentPage == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page6");;
 
       InternalPage * parentPage = reinterpret_cast < InternalPage * > (rawParentPage -> GetData());
       page_id_t leftBrotherId = parentPage -> GetLeftSibling(currentPageId);
@@ -508,7 +508,7 @@ namespace bustub {
       InternalPage * rightBrotherPage;
       if (leftBrotherId != INVALID_PAGE_ID) {
         Page * rawLeftBrother = buffer_pool_manager_ -> FetchPage(leftBrotherId);
-        if (rawLeftBrother == nullptr) return;
+        if (rawLeftBrother == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page7");;
         leftBrotherPage = reinterpret_cast < InternalPage * > (rawLeftBrother -> GetData());
         if (!leftBrotherPage -> IsMin()) {
           currentInternalPage -> Remove(value);
@@ -530,7 +530,7 @@ namespace bustub {
       if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
         //if the previous step failed try with the right brother
         Page * rawRightBrother = buffer_pool_manager_ -> FetchPage(rightBrotherId);
-        if (rawRightBrother == nullptr) return;
+        if (rawRightBrother == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page8");;
         rightBrotherPage = reinterpret_cast < InternalPage * > (rawRightBrother -> GetData());
         if (!rightBrotherPage -> IsMin()) {
           currentInternalPage -> Remove(value);
@@ -925,7 +925,7 @@ namespace bustub {
       page_id_t newPageId;
       Page * rawNewPage = buffer_pool_manager_ -> NewPage( & newPageId);
      //assert(rawNewPage != nullptr);
-      if (rawNewPage == nullptr) return nullptr;
+      if (rawNewPage == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page9");;
       T * newPage = reinterpret_cast < T * > (rawNewPage -> GetData());
       newPage -> Init(newPageId, oldNode -> GetParentPageId(), oldNode -> GetMaxSize());
       return newPage;
