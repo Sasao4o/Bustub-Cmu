@@ -392,7 +392,7 @@ namespace bustub {
 
     CleanupDeletedPages(transaction);
     ClearLatches(DELETE_TRAVERSE, transaction, true);
-    LOG_DEBUG("Free size is %d", buffer_pool_manager_->GetFreeEvictableSize() + buffer_pool_manager_->GetFreeListSize());
+
   }
   INDEX_TEMPLATE_ARGUMENTS
   void BPLUSTREE_TYPE::HandleLeafDelete(BPlusTreePage * currentPage,
@@ -945,7 +945,7 @@ namespace bustub {
       transaction -> AddIntoPageSet(page);
     } else if (type == DELETE_TRAVERSE) {
       page -> WLatch();
-      if ((BPage -> GetMinSize() < BPage -> GetSize() - 1) && !BPage->IsRootPage()) {
+      if (!(BPage -> GetMinSize() == BPage -> GetSize()) && !BPage->IsRootPage()) {
         ClearLatches(type, transaction, isChanged);
       }
       transaction -> AddIntoPageSet(page);
