@@ -112,7 +112,7 @@ namespace bustub {
         }
       return false;
     }
-    if (ourLeaf->IsFull()) {
+    if (ourLeaf->GetMaxSize() == ourLeaf->GetSize() + 1) {
       //We Need to Split
       LeafPage * returnedLeaf;
       MappingType newPair = std::make_pair(key, value);
@@ -259,7 +259,7 @@ namespace bustub {
 
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::InsertInFullInternal(const KeyType & k,
-    const page_id_t & Pointer, InternalPage * oldInternalPage, InternalPage ** returnedNewPage) -> std::pair < KeyType, page_id_t > {
+    const page_id_t & Pointer, InternalPage * oldInternalPage, InternalPage ** returnedNewPage, int brotherId) -> std::pair < KeyType, page_id_t > {
     int arrayLength = oldInternalPage -> GetArraySize();
     if (arrayLength != oldInternalPage -> GetMaxSize() + 1) return GetInvalidPair();
     // page_id_t newPageId;
@@ -297,10 +297,18 @@ namespace bustub {
       //This Loop is responsible for updating parent pointers
       page_id_t currentPageId = newInternalPage -> ValueAt(i);
       Page * rawPage = buffer_pool_manager_ -> FetchPage(currentPageId);
+  
       if (rawPage == nullptr) return GetInvalidPair();
+           if (currentPageId != Pointer && currentPageId != brotherId) {
+         rawPage->WLatch();
+      }
       BPlusTreePage * BPage = reinterpret_cast < BPlusTreePage * > (rawPage -> GetData());
       BPage -> SetParentPageId(newInternalPage -> GetPageId());
       //BUG
+      if (currentPageId != Pointer && currentPageId != brotherId) {
+      rawPage->WUnlatch();
+      }
+      //  rawPage->WUnlatch();
       buffer_pool_manager_ -> UnpinPage(currentPageId, true);
     }
     //Median + 1 is sent to the caller so he insert it to the parent 
@@ -316,7 +324,7 @@ namespace bustub {
       InternalPage * brotherPage;
       InternalPage * parentPage;
       page_id_t parentPageId = currentInternal -> GetParentPageId();
-      std::pair < KeyType, page_id_t > returnedPair = InsertInFullInternal(key, currentPageId, currentInternal, & brotherPage);
+      std::pair < KeyType, page_id_t > returnedPair = InsertInFullInternal(key, currentPageId, currentInternal, & brotherPage, brotherId);
       if (parentPageId == INVALID_PAGE_ID) {
         //Here i need to create new rgit oot 
         parentPage = BuildRootNode < InternalPage > (internal_max_size_);
@@ -410,8 +418,11 @@ namespace bustub {
 
       LeafPage * leftBrotherPage;
       LeafPage * rightBrotherPage;
+      Page * rawLeftBrother;
+      Page * rawRightBrother;
       if (leftBrotherId != INVALID_PAGE_ID) {
-        Page * rawLeftBrother = buffer_pool_manager_ -> FetchPage(leftBrotherId);
+         rawLeftBrother = buffer_pool_manager_ -> FetchPage(leftBrotherId);
+        rawLeftBrother->WLatch();
         if (rawLeftBrother == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page5");;
         leftBrotherPage = reinterpret_cast < LeafPage * > (rawLeftBrother -> GetData());
         if (!leftBrotherPage -> IsMin()) {
@@ -421,13 +432,14 @@ namespace bustub {
           KeyType myKey = currentLeafPage -> KeyAt(0);
           parentPage -> ChangeKeyOfValue(currentPageId, myKey);
           sucess = true;
-  
           buffer_pool_manager_ -> UnpinPage(parentPage -> GetPageId(), true);
         }
+        rawLeftBrother->WUnlatch();
       }
       if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
         //if the previous step failed try with the right brother
-        Page * rawRightBrother = buffer_pool_manager_ -> FetchPage(rightBrotherId);
+         rawRightBrother = buffer_pool_manager_ -> FetchPage(rightBrotherId);
+        rawRightBrother->WLatch();
         if (rawRightBrother == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page");;
         rightBrotherPage = reinterpret_cast < LeafPage * > (rawRightBrother -> GetData());
         if (!rightBrotherPage -> IsMin()) {
@@ -437,29 +449,34 @@ namespace bustub {
           KeyType myKey = rightBrotherPage -> KeyAt(0);
           parentPage -> ChangeKeyOfValue(rightBrotherId, myKey);
           sucess = true;
-        
           buffer_pool_manager_ -> UnpinPage(parentPage -> GetPageId(), true);
         }
+         rawRightBrother->WUnlatch();
       }
       if (!sucess) {
         //Here i have to merge 
 
         //we will start looking for merge opportinutiy at the left
         if (leftBrotherId != INVALID_PAGE_ID) {
+          rawLeftBrother->WLatch();
           currentLeafPage -> Remove(key, comparator_);
           Merge(currentLeafPage, leftBrotherPage);
           transaction -> AddIntoDeletedPageSet(currentPageId);
           // parentPage->Remove(currentPageId);
+            rawLeftBrother->WUnlatch();
           HandleInternalDelete(parentPage, currentPageId, transaction);
           sucess = true;
+         
         } else if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
+          rawRightBrother->WLatch();
           currentLeafPage -> Remove(key, comparator_);
           Merge(rightBrotherPage, currentLeafPage);
           transaction -> AddIntoDeletedPageSet(rightBrotherId);
+            rawRightBrother->WUnlatch();
           HandleInternalDelete(parentPage, rightBrotherId, transaction);
           // parentPage->Remove(rightBrotherId);//
-
           sucess = true;
+         
         }
   
       buffer_pool_manager_ -> UnpinPage(currentPage -> GetParentPageId(), true);
@@ -508,8 +525,11 @@ namespace bustub {
       page_id_t rightBrotherId = parentPage -> GetRightSibling(currentPageId);
       InternalPage * leftBrotherPage;
       InternalPage * rightBrotherPage;
+      Page * rawLeftBrother;
+      Page * rawRightBrother;
       if (leftBrotherId != INVALID_PAGE_ID) {
-        Page * rawLeftBrother = buffer_pool_manager_ -> FetchPage(leftBrotherId);
+         rawLeftBrother = buffer_pool_manager_ -> FetchPage(leftBrotherId);
+          rawLeftBrother->WLatch();
         if (rawLeftBrother == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page7");;
         leftBrotherPage = reinterpret_cast < InternalPage * > (rawLeftBrother -> GetData());
         if (!leftBrotherPage -> IsMin()) {
@@ -528,10 +548,12 @@ namespace bustub {
           buffer_pool_manager_ -> UnpinPage(movedPairs.second, true);
  
         }
+         rawLeftBrother->WUnlatch();
       }
       if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
         //if the previous step failed try with the right brother
-        Page * rawRightBrother = buffer_pool_manager_ -> FetchPage(rightBrotherId);
+         rawRightBrother = buffer_pool_manager_ -> FetchPage(rightBrotherId);
+         rawRightBrother->WLatch();
         if (rawRightBrother == nullptr) throw Exception(ExceptionType::OUT_OF_MEMORY, "fail to fetch page8");;
         rightBrotherPage = reinterpret_cast < InternalPage * > (rawRightBrother -> GetData());
         if (!rightBrotherPage -> IsMin()) {
@@ -550,12 +572,14 @@ namespace bustub {
           buffer_pool_manager_ -> UnpinPage(movedPairs.second, true);
          
         }
+        rawRightBrother->WUnlatch();
       }
       if (!sucess) {
         //Here i have to merge 
 
         //we will start looking for merge opportinutiy at the left
         if (leftBrotherId != INVALID_PAGE_ID) {
+          rawLeftBrother->WLatch();
           currentInternalPage -> Remove(value);
           KeyType topKey = parentPage -> GetKeyOfValue(currentPageId);
           page_id_t firstPageId = currentInternalPage -> ValueAt(0);
@@ -567,10 +591,13 @@ namespace bustub {
           MergeInternalPage(currentInternalPage, leftBrotherPage);
           transaction -> AddIntoDeletedPageSet(currentPageId);
           // parentPage->Remove(currentPageId);
+          rawLeftBrother->WUnlatch();
           HandleInternalDelete(parentPage, currentPageId, transaction);
           buffer_pool_manager_ -> UnpinPage(child -> GetPageId(), true);
           sucess = true;
+       
         } else if (rightBrotherId != INVALID_PAGE_ID && !sucess) {
+          rawRightBrother->WLatch();
           currentInternalPage -> Remove(value);
           KeyType topKey = parentPage -> GetKeyOfValue(rightBrotherId);
           page_id_t firstPageId = rightBrotherPage -> ValueAt(0);
@@ -582,9 +609,11 @@ namespace bustub {
           MergeInternalPage(rightBrotherPage, currentInternalPage);
           transaction -> AddIntoDeletedPageSet(rightBrotherId);
           // parentPage->Remove(currentPageId);
+          rawRightBrother->WUnlatch();
           HandleInternalDelete(parentPage, rightBrotherId, transaction);
           buffer_pool_manager_ -> UnpinPage(child -> GetPageId(), true);
           sucess = true;
+     
         }
  
       }
@@ -939,7 +968,7 @@ namespace bustub {
     BPlusTreePage * BPage = reinterpret_cast < BPlusTreePage * > (page);
     if (type == INSERT_TRAVERSE) {
       page -> WLatch();
-           if (BPage->GetSize() + 1 < BPage->GetMaxSize()) {
+           if ((BPage->GetSize() < BPage->GetMaxSize() - 1 || (!BPage->IsLeafPage() && BPage->GetSize() == BPage->GetMaxSize() - 1)) && !BPage->IsRootPage()) {
         ClearLatches(type, transaction, isChanged);
       }
       transaction -> AddIntoPageSet(page);

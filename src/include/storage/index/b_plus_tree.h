@@ -85,7 +85,7 @@ class BPlusTree {
  
   auto FindLeaf(KeyType key, page_id_t currentPageId, TRAVERSE_TYPE traverseType, Transaction*trans = nullptr) -> LeafPage*; 
  auto FindLeftMostLeaf(page_id_t currentPageId) -> LeafPage*; 
-  auto InsertInFullInternal(const KeyType &k,const page_id_t &Pointer, InternalPage * page, InternalPage**newPage) -> std::pair<KeyType, page_id_t>;
+  auto InsertInFullInternal(const KeyType &k,const page_id_t &Pointer, InternalPage * page, InternalPage**newPage, int brotherId) -> std::pair<KeyType, page_id_t>;
   auto InsertIntoParent(InternalPage *parentNode, KeyType &key, page_id_t Value ,page_id_t brotherId, Transaction*trans) -> void;
 
   auto GetInvalidPair() -> std::pair<KeyType, page_id_t>;
