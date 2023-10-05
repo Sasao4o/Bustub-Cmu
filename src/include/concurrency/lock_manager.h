@@ -296,15 +296,22 @@ class LockManager {
    * Runs cycle detection in the background.
    */
   auto RunCycleDetection() -> void;
-
+  void  RemoveTransactionTableLocks(Transaction *txn, LockRequest* lock_request);
+    void  RemoveTransactionRowLocks(Transaction *txn, LockRequest* lock_request);
+  bool  CheckMyTurn(std::list<LockRequest *>& lockReqList, LockRequest * lockReq);
+  void  UpdateTableLockSet(Transaction *txn, LockRequest *lock_request ) ;
+  void UpdateRowLockSet(Transaction *txn, LockRequest *lock_request);
+ 
  private:
   /** Fall 2022 */
   /** Structure that holds lock requests for a given table oid */
+  //To Answer Question Like (Who has locks now to Table)
   std::unordered_map<table_oid_t, std::shared_ptr<LockRequestQueue>> table_lock_map_;
   /** Coordination */
   std::mutex table_lock_map_latch_;
 
   /** Structure that holds lock requests for a given RID */
+  //To Answer Question like (Who has acces now to RID = x)
   std::unordered_map<RID, std::shared_ptr<LockRequestQueue>> row_lock_map_;
   /** Coordination */
   std::mutex row_lock_map_latch_;

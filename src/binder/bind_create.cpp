@@ -60,7 +60,8 @@ auto Binder::BindColumnDefinition(duckdb_libpgquery::PGColumnDef *cdef) -> Colum
   if (cdef->collClause != nullptr) {
     throw NotImplementedException("coll clause on column is not supported");
   }
-
+  //l PGVALUE da struct mmkn yb2 feh integer aw float  aw string
+  // Kol l klam l twel da by4war 3la mkan feh void pointer l parser mrg3o wna l tbe3e b3ml reintepert case 3l struct
   auto name = std::string(
       (reinterpret_cast<duckdb_libpgquery::PGValue *>(cdef->typeName->names->tail->data.ptr_value)->val.str));
 

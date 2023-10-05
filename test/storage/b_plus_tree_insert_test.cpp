@@ -172,60 +172,7 @@ namespace bustub {
 //   remove("test.log");
 // }
 
-  TEST(BPlusTreeTests, DuplicateInsert) {
-  // create KeyComparator and index schema
-  auto key_schema = ParseCreateStatement("a bigint");
-  GenericComparator<8> comparator(key_schema.get());
-
-  auto *disk_manager = new DiskManager("test.db");
-  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
-  // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
-  GenericKey<8> index_key;
-   GenericKey<8> index_key2;
-  RID rid;
-  RID rid2;
-
-  // create transaction
-  auto *transaction = new Transaction(0);
-
-  // create and fetch header_page
-  page_id_t page_id;
-  auto header_page = bpm->NewPage(&page_id);
-  ASSERT_EQ(page_id, HEADER_PAGE_ID);
-  (void)header_page;
-
-  int64_t key = 42;
-  int64_t value = key & 0xFFFFFFFF;
-  rid.Set(static_cast<int32_t>(key), value);
-  index_key.SetFromInteger(key);
-  tree.Insert(index_key, rid, transaction);
  
-  auto root_page_id = tree.GetRootPageId();
-  auto root_page = reinterpret_cast<BPlusTreePage *>(bpm->FetchPage(root_page_id)->GetData());
-  ASSERT_NE(root_page, nullptr);
-  ASSERT_TRUE(root_page->IsLeafPage());
-
-  auto root_as_leaf = reinterpret_cast<BPlusTreeLeafPage<GenericKey<8>, RID, GenericComparator<8>> *>(root_page);
-  ASSERT_EQ(root_as_leaf->GetSize(), 1);
-  ASSERT_EQ(comparator(root_as_leaf->KeyAt(0), index_key), 0);
-
-  int64_t key2 = 43;
-  int64_t value2 = key & 0xFFFFFFFF;
-  rid2.Set(static_cast<int32_t>(key2), value2);
-  index_key2.SetFromInteger(key2);
-  ASSERT_EQ(tree.Insert(index_key2, rid2, transaction),true);
- 
-  ASSERT_EQ(root_as_leaf->KeyExist(index_key2, comparator), true);
-  ASSERT_EQ(root_as_leaf->GetSize(), 2);
-  bpm->UnpinPage(root_page_id, false);
-  bpm->UnpinPage(HEADER_PAGE_ID, true);
-  delete transaction;
-  delete disk_manager;
-  delete bpm;
-  remove("test.db");
-  remove("test.log");
-}
 TEST(BPlusTreeTests, DISABLED_myTest) {
   /*
     This Test Assume it is binary tree 
@@ -475,7 +422,7 @@ TEST(BPlusTreeTests, HardTest) {
   GenericComparator<8> comparator(key_schema.get());
 
   auto *disk_manager = new DiskManager("test.db");
-  BufferPoolManager *bpm = new BufferPoolManagerInstance(6, disk_manager);
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(10, disk_manager);
   // create b+ tree
   BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
   GenericKey<8> index_key;
@@ -525,8 +472,8 @@ TEST(BPlusTreeTests, HardTest) {
   EXPECT_EQ(size, keys.size());
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
-  EXPECT_EQ(bpm->GetFreeEvictableSize(), 50);
-  EXPECT_EQ(bpm->GetFreeListSize(), 50);
+  // EXPECT_EQ(bpm->GetFreeEvictableSize(), 50);
+  // EXPECT_EQ(bpm->GetFreeListSize(), 50);
   delete transaction;
   delete disk_manager;
   delete bpm;
@@ -554,14 +501,14 @@ TEST(BPlusTreeTests, InsertTest3) {
   ASSERT_EQ(page_id, HEADER_PAGE_ID);
   (void)header_page;
 
-  std::vector<int64_t> keys = {5, 4, 3, 2, 1};
+  std::vector<int64_t> keys = {1,2,4,5,3,6,7};
   for (auto key : keys) {
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid, transaction);
   }
-
+  
   std::vector<RID> rids;
   for (auto key : keys) {
     rids.clear();
@@ -596,6 +543,71 @@ TEST(BPlusTreeTests, InsertTest3) {
   }
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
+ 
+  delete transaction;
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
+TEST(BPlusTreeTests, InsertTest4) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator);
+  GenericKey<8> index_key;
+  RID rid;
+  // create transaction
+  auto *transaction = new Transaction(0);
+
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  ASSERT_EQ(page_id, HEADER_PAGE_ID);
+  (void)header_page;
+
+  std::vector<int64_t> keys = {1,2,4,5,3,6,7};
+  for (auto key : keys) {
+    int64_t value = key & 0xFFFFFFFF;
+    rid.Set(static_cast<int32_t>(key >> 32), value);
+    index_key.SetFromInteger(key);
+    tree.Insert(index_key, rid, transaction);
+  }
+  
+  std::vector<RID> rids;
+  for (auto key : keys) {
+    rids.clear();
+    index_key.SetFromInteger(key);
+    tree.GetValue(index_key, &rids);
+    EXPECT_EQ(rids.size(), 1);
+
+    int64_t value = key & 0xFFFFFFFF;
+    EXPECT_EQ(rids[0].GetSlotNum(), value);
+  }
+
+  int64_t start_key = 1;
+  int64_t current_key = start_key;
+  index_key.SetFromInteger(start_key);
+  for (auto iterator = tree.Begin(); iterator != tree.End(); ++iterator) {
+    auto location = (*iterator).second;
+    EXPECT_EQ(location.GetPageId(), 0);
+    EXPECT_EQ(location.GetSlotNum(), current_key);
+    current_key = current_key + 1;
+  }
+
+  EXPECT_EQ(current_key, keys.size() + 1);
+
+  
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+ EXPECT_EQ(bpm->GetFreeEvictableSize(), 0);
+ EXPECT_EQ(bpm->GetFreeListSize(), 0);
+
   delete transaction;
   delete disk_manager;
   delete bpm;

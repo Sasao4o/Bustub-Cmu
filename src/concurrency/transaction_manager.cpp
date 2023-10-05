@@ -40,6 +40,7 @@ auto TransactionManager::Begin(Transaction *txn, IsolationLevel isolation_level)
 
   std::unique_lock<std::shared_mutex> l(txn_map_mutex);
   txn_map[txn->GetTransactionId()] = txn;
+  //Automotically we leave the lock as we goees out of scope RAII
   return txn;
 }
 

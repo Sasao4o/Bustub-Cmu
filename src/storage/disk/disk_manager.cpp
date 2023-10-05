@@ -50,7 +50,9 @@ DiskManager::DiskManager(const std::string &db_file) : file_name_(db_file) {
   }
 
   std::scoped_lock scoped_db_io_latch(db_io_latch_);
-  db_io_.open(db_file, std::ios::binary | std::ios::in | std::ios::out);
+  //File streams are associated with files either on construction, or by calling member open.
+
+    db_io_.open(db_file, std::ios::binary | std::ios::in | std::ios::out);
   // directory or file does not exist
   if (!db_io_.is_open()) {
     db_io_.clear();

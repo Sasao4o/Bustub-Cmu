@@ -91,6 +91,7 @@ namespace bustub {
   auto BPLUSTREE_TYPE::Insert(const KeyType & key,
     const ValueType & value, Transaction * transaction) -> bool {
       if (transaction != nullptr) {
+        LOG_DEBUG("Trying to aquire wLatch");
     rootLatch.WLock();
     transaction -> AddIntoPageSet(nullptr);
       }
@@ -667,7 +668,10 @@ namespace bustub {
     //THIS IS NOT MULTITHREADED SAFE!!
     //I will create iterator that has in its current state the most left leaf so i wanna give him this id !
     rootLatch.RLock();
-    if (root_page_id_ == INVALID_PAGE_ID) return INDEXITERATOR_TYPE(INVALID_PAGE_ID, buffer_pool_manager_, 0);
+    if (root_page_id_ == INVALID_PAGE_ID) {
+    rootLatch.RUnlock();
+    return INDEXITERATOR_TYPE(INVALID_PAGE_ID, buffer_pool_manager_, 0);
+    }
     rootLatch.RUnlock();
     LeafPage * leftMostLeaf = FindLeftMostLeaf(root_page_id_);
     buffer_pool_manager_ -> UnpinPage(leftMostLeaf -> GetPageId(), false);
@@ -682,10 +686,14 @@ namespace bustub {
   INDEX_TEMPLATE_ARGUMENTS
   auto BPLUSTREE_TYPE::Begin(const KeyType & key) -> INDEXITERATOR_TYPE {
     rootLatch.RLock();
-    if (root_page_id_ == INVALID_PAGE_ID) return INDEXITERATOR_TYPE(INVALID_PAGE_ID, buffer_pool_manager_, 0);
-    rootLatch.RUnlock();
+    if (root_page_id_ == INVALID_PAGE_ID) {
+        rootLatch.RUnlock();
+       return INDEXITERATOR_TYPE(INVALID_PAGE_ID, buffer_pool_manager_, 0);
+    }
+        rootLatch.RUnlock();
     LeafPage * currentLeaf = FindLeaf(key, root_page_id_, LOOKUP_TRAVERSE);
     int index = currentLeaf -> KeyIndex(key, comparator_);
+     buffer_pool_manager_ -> UnpinPage(currentLeaf -> GetPageId(), false);
     return INDEXITERATOR_TYPE(currentLeaf -> GetPageId(), buffer_pool_manager_, index);
   }
 

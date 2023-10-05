@@ -20,6 +20,7 @@ INDEXITERATOR_TYPE::IndexIterator(int pageId, BufferPoolManager *buffer_pool_man
 
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::~IndexIterator() {
+   if (!IsEnd()) buffer_pool_manager_->UnpinPage(currentPageId,false);
     // buffer_pool_manager_->UnpinPage(currentPageId,false);
 };  // NOLINT
 
@@ -45,7 +46,7 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
          }
 
    int oldPageId = currentPageId;
-   Page* currentPage = buffer_pool_manager_->FetchPage(currentPageId);
+   Page* currentPage = buffer_pool_manager_->FetchPage(oldPageId);
    B_PLUS_TREE_LEAF_PAGE_TYPE * currentLeaf =  reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE *>(currentPage->GetData());
   
    currentIndex++;
@@ -54,7 +55,7 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
     currentPageId = currentLeaf->GetNextPageId();
    }
    buffer_pool_manager_->UnpinPage(oldPageId, false);
-   buffer_pool_manager_->UnpinPage(currentPageId, false);
+//    buffer_pool_manager_->UnpinPage(currentPageId, false);
    return *this;
 }
 

@@ -355,9 +355,9 @@ class Transaction {
   /** LockManager: the set of table locks held by this transaction. */
   std::shared_ptr<std::unordered_set<table_oid_t>> s_table_lock_set_;
   std::shared_ptr<std::unordered_set<table_oid_t>> x_table_lock_set_;
-  std::shared_ptr<std::unordered_set<table_oid_t>> is_table_lock_set_;
-  std::shared_ptr<std::unordered_set<table_oid_t>> ix_table_lock_set_;
-  std::shared_ptr<std::unordered_set<table_oid_t>> six_table_lock_set_;
+  std::shared_ptr<std::unordered_set<table_oid_t>> is_table_lock_set_; // intent shared
+  std::shared_ptr<std::unordered_set<table_oid_t>> ix_table_lock_set_; //intent exclusive
+  std::shared_ptr<std::unordered_set<table_oid_t>> six_table_lock_set_; //shared intent exclusive
 
   /** LockManager: the set of row locks held by this transaction. */
   std::shared_ptr<std::unordered_map<table_oid_t, std::unordered_set<RID>>> s_row_lock_set_;
